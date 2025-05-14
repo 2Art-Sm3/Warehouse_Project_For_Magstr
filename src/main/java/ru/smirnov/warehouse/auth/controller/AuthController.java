@@ -37,10 +37,10 @@ public class AuthController {
         return "redirect:/login";
     }
 
-    @GetMapping("/dashboard")
-    public String dashboard() {
-        return "dashboard";
-    }
+//    @GetMapping("/dashboard")
+//    public String dashboard() {
+//        return "dashboard";
+//    }
 
     @GetMapping("/logout")
     public String logoutPage() {

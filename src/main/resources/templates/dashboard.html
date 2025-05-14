@@ -19,18 +19,42 @@
 </nav>
 
 <!-- Основное содержимое -->
-<div class="container mt-5 text-center">
-    <h1>Добро пожаловать в систему складского учёта</h1>
-    <div class="mt-4">
-        <a class="btn btn-primary btn-lg m-2" href="/products">Товары</a>
-        <a class="btn btn-primary btn-lg m-2" href="/inventory">Склад</a>
-        <a class="btn btn-primary btn-lg m-2" href="/costing">Юнит-экономика</a>
-    </div>
-</div>
-
-<!-- Дополнительное содержимое -->
 <div class="container mt-5">
-    <div class="row">
+    <!-- Форма для ввода ключей Ozon API -->
+    <div class="row mb-4">
+        <div class="col-md-6 offset-md-3">
+            <h4>Подключение к Ozon API</h4>
+            <form th:action="@{/dashboard/update-ozon-keys}" method="post">
+                <div class="mb-3">
+                    <label for="clientId" class="form-label">Client-Id</label>
+                    <input type="text" class="form-control" id="clientId" name="clientId" th:value="${ozonClientId}">
+                </div>
+                <div class="mb-3">
+                    <label for="apiKey" class="form-label">Api-Key</label>
+                    <input type="text" class="form-control" id="apiKey" name="apiKey" th:value="${ozonApiKey}">
+                </div>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </form>
+            <!-- Статус подключения -->
+            <div class="mt-3">
+                <h5>Статус подключения:</h5>
+                <p th:text="${ozonApiStatus} ?: 'Не проверено'"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Кнопки перехода -->
+    <div class="text-center">
+        <h1>Добро пожаловать в систему складского учёта</h1>
+        <div class="mt-4">
+            <a class="btn btn-primary btn-lg m-2" href="/products">Товары</a>
+            <a class="btn btn-primary btn-lg m-2" href="/inventory">Склад</a>
+            <a class="btn btn-primary btn-lg m-2" href="/costing">Юнит-экономика</a>
+        </div>
+    </div>
+
+    <!-- Дополнительное содержимое -->
+    <div class="row mt-5">
         <div class="col-md-4">
             <div class="card">
                 <div class="card-body">

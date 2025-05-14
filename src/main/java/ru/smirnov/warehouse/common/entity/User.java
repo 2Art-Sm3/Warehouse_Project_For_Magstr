@@ -34,4 +34,9 @@ public class User {
     @Column(nullable = false)
     private String role;
 
+    @Column
+    private String ozonClientId;
+    @Column
+    private String ozonApiKey;
+
 }
