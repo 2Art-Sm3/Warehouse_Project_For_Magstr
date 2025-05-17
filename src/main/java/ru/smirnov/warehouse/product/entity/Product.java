@@ -24,8 +24,8 @@ public class Product {
     private String offerId;
     @Column(nullable = false)
     private String name;
-    @Column
-    private String color;
+//    @Column
+//    private String color;
     @Column
     private Integer quantityForSale; // Количество к продаже (с Ozon)
     @Column
@@ -44,7 +44,7 @@ public class Product {
     @Column
     private Double lastMileFee; // Последняя миля
     @Column
-    private Double otherFrees; // проч комиссии
+    private Double otherFees; // Прочие комиссии
 
     @Column
     private Integer soldQuantity; // Продано (с Ozon)
@@ -52,6 +52,10 @@ public class Product {
     private Integer orderedInTransit; // Заказано в пути (с Ozon)
     @Column
     private String fulfillmentType;
+
+    @Column(columnDefinition = "BIT DEFAULT FALSE")
+    private Boolean hasAssembly; // Флаг наличия сборки
+
 //      @Column
 //    private Double cost; // Себестоимость (рассчитывается)
 //    @Column

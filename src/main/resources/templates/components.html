@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Компоненты</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-3">
+    <h2>Управление компонентами</h2>
+    <table class="table table-striped table-bordered">
+        <thead>
+        <tr>
+            <th>Название</th>
+            <th>Количество</th>
+            <th>Товар</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="component : ${components}">
+            <td th:text="${component.name}"></td>
+            <td th:text="${component.quantity}"></td>
+            <td th:text="${component.product.name}"></td>
+        </tr>
+        </tbody>
+    </table>
+    <a href="/dashboard" class="btn btn-info">Вернуться в главное меню</a>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

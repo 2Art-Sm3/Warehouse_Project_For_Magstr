@@ -18,18 +18,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-//import static sun.awt.geom.Curve.round;
 
 @Service
 public class ProductService {
-
-    private static final Logger logger = LoggerFactory.getLogger(ProductService.class);
 
     private ProductRepository productRepository;
     private OzonService ozonService;
     private ObjectMapper objectMapper;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+    private static final Logger logger = LoggerFactory.getLogger(ProductService.class);
 
     public ProductService(ProductRepository productRepository, OzonService ozonService, ObjectMapper objectMapper) {
         this.productRepository = productRepository;
@@ -269,12 +267,13 @@ public class ProductService {
                 product.setAcquiringFee(round(countAcq > 0 ? sumAcq / countAcq : 0.0));
                 product.setLogisticsFee(round(countOrders > 0 ? sumLog / countOrders : 0.0));
                 product.setLastMileFee(round(maxLastMile));
+                product.setOtherFees(round(countOrders > 0 ? sumOther / countOrders : 0.0));
                 product.setOzonCommissions(round(
                         product.getOzonReward()
                                 + product.getAcquiringFee()
                                 + product.getLogisticsFee()
                                 + product.getLastMileFee()
-                                + round(countOrders > 0 ? sumOther / countOrders : 0.0)
+                                + product.getOtherFees()
                 ));
 
                 saveProduct(product);
@@ -294,197 +293,4 @@ public class ProductService {
             double otherFees
     ) {}
 
-
-//    private void syncTransactionsAndCommissions() {
-//        LocalDateTime now = LocalDateTime.now();
-//        LocalDateTime oneMonthAgo = now.minusDays(30);
-//        String fromDate = oneMonthAgo.format(DATE_FORMATTER);
-//        String toDate = now.format(DATE_FORMATTER);
-//
-//        String response = ozonService.getTransactionList(fromDate, toDate, "", "all");
-//        try {
-//            logger.debug("Transaction list response: {}", response);
-//            JsonNode root = objectMapper.readTree(response);
-//            JsonNode operations = root.path("result").path("operations");
-//            if (!operations.isArray() || operations.size() == 0) {
-//                logger.warn("No transaction operations found in response");
-//                return;
-//            }
-//
-//            // Карта для агрегации данных по SKU
-//            Map<String, Map<String, Double>> feeMap = new HashMap<>();
-//            Map<String, Integer> soldCountMap = new HashMap<>();
-//
-//            for (JsonNode operation : operations) {
-//                JsonNode items = operation.path("items");
-//                if (!items.isArray() || items.size() == 0) continue;
-//
-//                String opType = operation.path("type").asText();
-//                String opName = operation.path("operation_type").asText();
-//
-//                for (JsonNode item : items) {
-//                    String sku = item.path("sku").asText();
-//                    // получаем или создаём метрики
-//                    Map<String, Double> fees = feeMap.computeIfAbsent(sku, k -> new HashMap<>());
-//                    fees.putIfAbsent("ozonReward", 0.0);
-//                    fees.putIfAbsent("acquiringFee", 0.0);
-//                    fees.putIfAbsent("logisticsFee", 0.0);
-//                    fees.putIfAbsent("lastMileFee", 0.0);
-//
-//                    // 1) Продажа — это orders
-//                    if ("orders".equals(opType)) {
-//                        // accruals_for_sale → ozonReward
-//                        double reward = operation.path("accruals_for_sale").asDouble(0.0);
-//                        fees.put("ozonReward", fees.get("ozonReward") + reward);
-//
-//                        // services в заказах содержат логистику и последнюю милю
-//                        for (JsonNode service : operation.path("services")) {
-//                            String name = service.path("name").asText();
-//                            double price = Math.abs(service.path("price").asDouble(0.0));
-//                            if (name.equals("MarketplaceServiceItemDelivToCustomer")) {
-//                                // берем максимум
-//                                fees.put("lastMileFee", Math.max(fees.get("lastMileFee"), price));
-//                            } else if (name.startsWith("MarketplaceServiceItemDirectFlowLogistic")
-//                                    || name.equals("MarketplaceServiceItemDeliveryKGT")) {
-//                                fees.put("logisticsFee", fees.get("logisticsFee") + price);
-//                            }
-//                        }
-//                    }
-//
-//                    // 2) Эквайринг — отдельный тип операции
-//                    if ("other".equals(opType) && "MarketplaceRedistributionOfAcquiringOperation".equals(opName)) {
-//                        for (JsonNode service : operation.path("services")) {
-//                            if ("MarketplaceRedistributionOfAcquiringOperation"
-//                                    .equals(service.path("name").asText())) {
-//                                double price = Math.abs(service.path("price").asDouble(0.0));
-//                                fees.put("acquiringFee", fees.get("acquiringFee") + price);
-//                            }
-//                        }
-//                    }
-//
-//                    soldCountMap.compute(sku, (k, v) -> v == null ? 1 : v + 1);
-//                }
-//            }
-//
-//
-////            for (JsonNode operation : operations) {
-////                JsonNode items = operation.path("items");
-////                if (!items.isArray() || items.size() == 0) {
-////                    continue; // Пропускаем операции без товаров
-////                }
-////
-////                String deliverySchema = operation.path("posting").path("delivery_schema").asText("unknown");
-////                double saleCommission = operation.path("sale_commission").asDouble(0.0);
-////
-////                // Обработка каждого товара в операции
-////                for (JsonNode item : items) {
-////                    String sku = item.path("sku").asText();
-////                    feeMap.computeIfAbsent(sku, k -> new HashMap<>()).putIfAbsent("ozonReward", 0.0);
-////                    feeMap.computeIfAbsent(sku, k -> new HashMap<>()).putIfAbsent("acquiringFee", 0.0);
-////                    feeMap.computeIfAbsent(sku, k -> new HashMap<>()).putIfAbsent("logisticsFee", 0.0);
-////                    feeMap.computeIfAbsent(sku, k -> new HashMap<>()).putIfAbsent("lastMileFee", Double.MIN_VALUE); // Для максимума
-////
-////                    // Увеличиваем количество продаж
-////                    soldCountMap.compute(sku, (k, v) -> v == null ? 1 : v + 1);
-////
-////                    // Добавляем sale_commission как ozonReward
-////                    feeMap.get(sku).put("ozonReward", feeMap.get(sku).get("ozonReward") + Math.abs(saleCommission));
-////
-////                    // Обработка services
-////                    JsonNode services = operation.path("services");
-////                    for (JsonNode service : services) {
-////                        double price = service.path("price").asDouble(0.0);
-////                        String serviceName = service.path("name").asText().toLowerCase();
-////                        if (serviceName.contains("marketplaceredistributionofacquiringoperation")) {
-////                            feeMap.get(sku).put("acquiringFee", feeMap.get(sku).get("acquiringFee") + Math.abs(price));
-////                        } else if (serviceName.contains("marketplaceserviceitemdirectflowlogistic")) {
-////                            feeMap.get(sku).put("logisticsFee", feeMap.get(sku).get("logisticsFee") + Math.abs(price));
-////                        } else if (serviceName.contains("marketplaceserviceitemdelivtocustomer")) {
-////                            double currentMax = feeMap.get(sku).get("lastMileFee");
-////                            feeMap.get(sku).put("lastMileFee", Math.max(currentMax, Math.abs(price)));
-////                        }
-////                    }
-////                }
-////            }
-//
-//            List<Product> products = new ArrayList<>(getAllProducts());
-//            for (Product product : products) {
-//                String sku = product.getSku();
-//                String fulfillmentType = product.getFulfillmentType();
-//                if (fulfillmentType != null) {
-//                    Map<String, Double> fees = feeMap.getOrDefault(sku, new HashMap<>());
-//                    product.setOzonReward(fees.getOrDefault("ozonReward", 0.0));
-//                    product.setAcquiringFee(fees.getOrDefault("acquiringFee", 0.0));
-//                    product.setLogisticsFee(fees.getOrDefault("logisticsFee", 0.0));
-//                    product.setLastMileFee(fees.getOrDefault("lastMileFee", 0.0) == Double.MIN_VALUE ? 0.0 : fees.getOrDefault("lastMileFee", 0.0));
-//                    product.setOzonCommissions(
-//                            product.getOzonReward() +
-//                                    product.getAcquiringFee() +
-//                                    product.getLogisticsFee() +
-//                                    product.getLastMileFee()
-//                    );
-//                    product.setSoldQuantity(soldCountMap.getOrDefault(sku, 0));
-//                    logger.info("Updated fees for SKU: {}, ozonReward: {}, acquiringFee: {}, logisticsFee: {}, lastMileFee: {}, ozonCommissions: {}, soldQuantity: {}",
-//                            sku, product.getOzonReward(), product.getAcquiringFee(), product.getLogisticsFee(), product.getLastMileFee(),
-//                            product.getOzonCommissions(), product.getSoldQuantity());
-//                    saveProduct(product);
-//                } else {
-//                    logger.warn("No fulfillmentType for SKU: {}, skipping fee update", sku);
-//                }
-//            }
-//        } catch (Exception e) {
-//            logger.error("Error processing transactions: {}", e.getMessage());
-//        }
-//    }
-
-//    private void syncTransactionsAndCommissions() {
-//        LocalDateTime now = LocalDateTime.now();
-//        LocalDateTime oneMonthAgo = now.minusDays(30);
-//        String fromDate = oneMonthAgo.format(DATE_FORMATTER);
-//        String toDate = now.format(DATE_FORMATTER);
-//
-//        String response = ozonService.getTransactionList(fromDate, toDate, "", "all");
-//        try {
-//            JsonNode root = objectMapper.readTree(response);
-//            JsonNode operations = root.path("result").path("operations");
-//            Map<String, Map<String, List<Double>>> commissionMap = new HashMap<>();
-//            Map<String, Integer> soldCountMap = new HashMap<>();
-//
-//            for (JsonNode operation : operations) {
-//                JsonNode items = operation.path("items");
-//                String deliverySchema = operation.path("posting").path("delivery_schema").asText();
-//                for (JsonNode item : items) {
-//                    String sku = item.path("sku").asText();
-//                    commissionMap.computeIfAbsent(sku, k -> new HashMap<>())
-//                            .computeIfAbsent(deliverySchema, k -> new ArrayList<>());
-//                    soldCountMap.compute(sku, (k, v) -> v == null ? 1 : v + 1);
-//
-//                    JsonNode services = operation.path("services");
-//                    for (JsonNode service : services) {
-//                        String serviceName = service.path("name").asText();
-//                        double price = service.path("price").asDouble();
-//                        commissionMap.get(sku).get(deliverySchema).add(price);
-//                    }
-//                    commissionMap.get(sku).get(deliverySchema).add(operation.path("sale_commission").asDouble());
-//                }
-//            }
-//
-//            List<Product> products = new ArrayList<>(getAllProducts());
-//            for (Product product : products) {
-//                String sku = product.getSku();
-//                String fulfillmentType = product.getFulfillmentType();
-//                if (fulfillmentType != null) {
-//                    Map<String, List<Double>> skuCommissions = commissionMap.getOrDefault(sku, new HashMap<>());
-//                    List<Double> commissions = skuCommissions.getOrDefault(fulfillmentType, List.of());
-//                    double totalCommissions = commissions.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-//                    product.setOzonCommissions(totalCommissions);
-//                    product.setSoldQuantity(soldCountMap.getOrDefault(sku, 0));
-//                    logger.info("Updated commissions for SKU: {}, totalCommissions: {}, soldQuantity: {}", sku, totalCommissions, soldCountMap.getOrDefault(sku, 0));
-//                    saveProduct(product);
-//                }
-//            }
-//        } catch (Exception e) {
-//            logger.error("Error processing transactions: {}", e.getMessage());
-//        }
-//    }
 }

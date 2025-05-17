@@ -1,5 +1,7 @@
 package ru.smirnov.warehouse.product.controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -16,42 +18,55 @@ public class ProductController {
     @Autowired
     private ProductService productService;
 
+    private static final Logger logger = LoggerFactory.getLogger(ProductController.class);
+
     @GetMapping("/manage")
     public String showProductManagement(Model model) {
+        productService.syncProductsWithOzon();
         List<Product> products = productService.getAllProducts();
         model.addAttribute("products", products);
         return "product";
     }
 
-    @GetMapping("/add")
-    public String showAddProductForm(Model model) {
-        model.addAttribute("product", new Product());
-        return "product-add";
-    }
-
-    @PostMapping("/add")
-    public String addProduct(@ModelAttribute Product product) {
-        productService.saveProduct(product);
-        return "redirect:/products/manage";
-    }
-
-    @GetMapping("/edit/{id}")
-    public String showEditProductForm(@PathVariable Long id, Model model) {
+    @PostMapping("/update-stock/{id}")
+    public String updateStock(@PathVariable Long id, @RequestParam(value = "quantityInStock", required = false) Integer quantityInStock) {
         Product product = productService.getProductById(id);
-        model.addAttribute("product", product);
-        return "product-edit";
-    }
-
-    @PostMapping("/edit/{id}")
-    public String editProduct(@PathVariable Long id, @ModelAttribute Product product) {
-        product.setId(id);
-        productService.saveProduct(product);
+        if (product != null) {
+            logger.info("Updating stock for product ID: {}, new quantity: {}", id, quantityInStock);
+            if (quantityInStock != null) {
+                product.setQuantityInStock(quantityInStock);
+            } else {
+                logger.warn("quantityInStock is null for product ID: {}", id);
+                product.setQuantityInStock(0); // Установка значения по умолчанию, если null
+            }
+            productService.saveProduct(product);
+        } else {
+            logger.error("Product with ID {} not found", id);
+        }
         return "redirect:/products/manage";
     }
 
-    @GetMapping("/delete/{id}")
-    public String deleteProduct(@PathVariable Long id) {
-        productService.deleteProduct(id);
+    @PostMapping("/create-assembly/{id}")
+    public String createAssembly(@PathVariable Long id, @RequestParam("componentName") String componentName,
+                                 @RequestParam("quantity") Integer quantity) {
+        // Логика создания сборки (нужна сущность ProductAssembly и сервис)
+        Product product = productService.getProductById(id);
+        if (product != null) {
+            // Здесь должна быть реализация добавления компонента (например, через ProductAssemblyService)
+            product.setHasAssembly(true); // Флаг для отображения кнопки "Смотреть сборку"
+            productService.saveProduct(product);
+        }
+        return "redirect:/products/manage";
+    }
+
+    @GetMapping("/view-assembly/{id}")
+    public String viewAssembly(@PathVariable Long id, Model model) {
+        Product product = productService.getProductById(id);
+        if (product != null && product.getHasAssembly()) {
+            // Логика загрузки и отображения сборки (нужна страница assembly.html)
+            model.addAttribute("product", product);
+            return "assembly"; // Предполагаемая страница для отображения иерархии
+        }
         return "redirect:/products/manage";
     }
 
