@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import ru.smirnov.warehouse.common.entity.User;
 
 @Getter
 @Setter
@@ -20,7 +21,7 @@ public class Product {
 
     @Column(nullable = false)
     private String sku;
-    @Column
+    @Column(unique = true)
     private String offerId;
     @Column(nullable = false)
     private String name;
@@ -56,6 +57,9 @@ public class Product {
     @Column(columnDefinition = "BIT DEFAULT FALSE")
     private Boolean hasAssembly; // Флаг наличия сборки
 
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 //      @Column
 //    private Double cost; // Себестоимость (рассчитывается)
 //    @Column

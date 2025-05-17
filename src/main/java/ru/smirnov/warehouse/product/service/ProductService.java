@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import ru.smirnov.warehouse.common.entity.User;
 import ru.smirnov.warehouse.common.service.OzonService;
 import ru.smirnov.warehouse.product.entity.Product;
 import ru.smirnov.warehouse.product.repository.ProductRepository;
@@ -13,10 +15,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 @Service
@@ -41,6 +40,19 @@ public class ProductService {
                 .doubleValue();
     }
 
+    private User getCurrentUser() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof org.springframework.security.core.userdetails.User) {
+            String username = ((org.springframework.security.core.userdetails.User) principal).getUsername();
+            // Предполагается, что username — это email, так как вы используете email для логина
+            // Вам нужно внедрить UserRepository или сервис для поиска User по email
+            // Для примера предполагаем, что у вас есть доступ к User
+            // Реализуйте это согласно вашей логике
+            throw new UnsupportedOperationException("Implement fetching User by email: " + username);
+        }
+        return (User) principal; // Предполагаем, что principal — это ваш объект User
+    }
+
     public List<Product> getAllProducts() {
         return productRepository.findAll();
     }
@@ -60,7 +72,7 @@ public class ProductService {
 
     public void syncProductsWithOzon() {
         // Очистка таблицы перед новой синхронизацией
-        productRepository.deleteAll();
+//        productRepository.deleteAll();
         logger.info("Cleared all products from the database");
 
         // Получаем список товаров
@@ -94,8 +106,21 @@ public class ProductService {
                     JsonNode productInfoItem = itemsInfo.get(0);
                     String sku = productInfoItem.path("sources").get(0).path("sku").asText();
                     String name = productInfoItem.path("name").asText();
-                    Product product = new Product();
-                    product.setOfferId(offerId);
+
+                    Optional<Product> existingProduct = productRepository.findByOfferId(offerId);
+                    Product product;
+                    if (existingProduct.isPresent()) {
+                        // Если продукт существует, обновляем его
+                        product = existingProduct.get();
+                        logger.info("Updating existing product with offerId: {}", offerId);
+                    } else {
+                        // Если продукта нет, создаём новый
+                        product = new Product();
+                        product.setOfferId(offerId);
+                        logger.info("Creating new product with offerId: {}", offerId);
+                    }
+
+//                    product.setOfferId(offerId);
                     product.setSku(sku);
                     product.setName(name);
                     saveProduct(product);

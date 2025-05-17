@@ -22,7 +22,7 @@ public class ProductController {
 
     @GetMapping("/manage")
     public String showProductManagement(Model model) {
-        productService.syncProductsWithOzon();
+//        productService.syncProductsWithOzon();
         List<Product> products = productService.getAllProducts();
         model.addAttribute("products", products);
         return "product";
@@ -32,14 +32,16 @@ public class ProductController {
     public String updateStock(@PathVariable Long id, @RequestParam(value = "quantityInStock", required = false) Integer quantityInStock) {
         Product product = productService.getProductById(id);
         if (product != null) {
-            logger.info("Updating stock for product ID: {}, new quantity: {}", id, quantityInStock);
+            logger.info("Received update-stock request for product ID: {}, quantityInStock: {}", id, quantityInStock);
             if (quantityInStock != null) {
                 product.setQuantityInStock(quantityInStock);
+                logger.info("Saving new quantityInStock: {} for product ID: {}", quantityInStock, id);
             } else {
-                logger.warn("quantityInStock is null for product ID: {}", id);
-                product.setQuantityInStock(0); // Установка значения по умолчанию, если null
+                logger.warn("quantityInStock is null for product ID: {}, setting to 0", id);
+                product.setQuantityInStock(0);
             }
-            productService.saveProduct(product);
+            Product savedProduct = productService.saveProduct(product);
+            logger.info("Saved product ID: {}, new quantityInStock: {}", id, savedProduct.getQuantityInStock());
         } else {
             logger.error("Product with ID {} not found", id);
         }
