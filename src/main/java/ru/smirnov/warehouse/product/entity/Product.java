@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import ru.smirnov.warehouse.common.entity.User;
+import ru.smirnov.warehouse.hierarchy.entity.HierarchyNode;
 
 @Getter
 @Setter
@@ -31,6 +32,8 @@ public class Product {
     private Integer quantityInStock; // Количество на складе (вручную)
     @Column
     private Double price; // Цена
+    @Column
+    private Double totalAssemblyCost; // Общая себестоимость сборки (сумма себестоимостей 1-го уровня)
 
     @Column
     private Double ozonCommissions; // Сумма комиссий Ozon
@@ -59,11 +62,7 @@ public class Product {
     @JoinColumn(name = "user_id")
     private User user;
 
-//      @Column
-//    private Double cost; // Себестоимость (рассчитывается)
-//    @Column
-//    private Double margin; // Маржа (рассчитывается)
-//    @Column
-//    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
-//    private List<ProductComponent> components;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "root_node_id")
+    private HierarchyNode rootNode; // Корневой узел иерархии
 }

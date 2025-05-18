@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Иерархия товара</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .table-bordered th, .table-bordered td {
+            border: 1px solid #dee2e6;
+        }
+        .table thead th {
+            border-bottom: 2px solid #dee2e6;
+            vertical-align: middle;
+        }
+        .modal-dialog {
+            max-width: 400px;
+        }
+        .hierarchy-container {
+            position: relative;
+            margin-top: 20px;
+        }
+        .product-table {
+            width: 300px;
+            float: left;
+            margin-right: 20px;
+        }
+        .hierarchy-table {
+            display: inline-block;
+            vertical-align: top;
+            margin-left: 10px;
+        }
+        .hierarchy-line {
+            position: absolute;
+            border-left: 1px dashed #000;
+            height: 100%;
+            left: 310px; /* Смещение от левого края таблицы товара */
+        }
+        .node-table {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        .action-btn {
+            padding: 2px 6px;
+            font-size: 12px;
+        }
+        .quantity-edit {
+            width: 60px;
+            display: inline;
+        }
+        .footer {
+            margin-top: 50px;
+            padding: 20px 0;
+            background-color: rgba(233, 236, 239, 0.9);
+            text-align: center;
+            border: 1px solid #ced4da;
+            width: 100%;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4>Складской учет</h4>
+        <div>
+            <span class="me-3">Привет, <span th:text="${#authentication.name} ?: 'Гость'"></span></span>
+            <a href="/logout" class="btn btn-outline-danger btn-sm">Выход</a>
+        </div>
+    </div>
+    <h2>Иерархия товара: <span th:text="${product.name}"></span></h2>
+    <a href="/products" class="btn btn-info mb-3">Вернуться к товарам</a>
+
+    <div class="hierarchy-container">
+        <!-- Таблица товара -->
+        <table class="table table-striped table-bordered product-table">
+            <thead>
+            <tr>
+                <th>Название</th>
+                <th>Себестоимость</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td th:text="${product.name}"></td>
+                <td th:text="${#numbers.formatDecimal(product.totalAssemblyCost ?: 0, 2, 2)} + ' руб.'"></td>
+            </tr>
+            </tbody>
+        </table>
+
+        <!-- Кнопка добавления элемента -->
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addComponentModal">
+            Добавить элемент
+        </button>
+        <button type="button" class="btn btn-secondary ms-2" data-bs-toggle="modal" data-bs-target="#addNodeModal">
+            Создать узел
+        </button>
+
+        <!-- Линия иерархии -->
+        <div class="hierarchy-line"></div>
+
+        <!-- Динамическая таблица иерархии -->
+        <div id="hierarchyTables" class="hierarchy-table">
+            <div th:each="level : ${hierarchy}">
+                <table class="table table-striped table-bordered node-table" th:id="'nodeTable' + ${level.childNode.id}">
+                    <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Количество</th>
+                        <th>Себестоимость за шт.</th>
+                        <th>Суммарная себестоимость</th>
+                        <th>Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td th:text="${level.childNode.name}"></td>
+                        <td>
+                            <input type="number" class="quantity-edit form-control" th:value="${level.childNode.quantity}"
+                                   th:id="'quantity' + ${level.childNode.id}" min="1" onchange="updateQuantity(${level.childNode.id}, this.value)">
+                            <button class="btn btn-sm btn-secondary action-btn" onclick="saveQuantity(${level.childNode.id})">Сохранить</button>
+                        </td>
+                        <td>
+                            <select class="form-select" th:if="${!level.childNode.isNode}" th:id="'unitCost' + ${level.childNode.id}"
+                                    onchange="updateUnitCost(${level.childNode.id}, this.value)">
+                                <option th:each="shipment : ${warehouseService.getShipmentsByComponent(level.childNode.component)}"
+                                        th:value="${shipment.purchasePrice}"
+                                        th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></option>
+                            </select>
+                            <span th:unless="${!level.childNode.isNode}" th:text="${#numbers.formatDecimal(level.childNode.unitCost ?: 0, 2, 2)} + ' руб.'"></span>
+                        </td>
+                        <td th:text="${#numbers.formatDecimal(level.childNode.totalCost ?: 0, 2, 2)} + ' руб.'"></td>
+                        <td>
+                            <button class="btn btn-danger btn-sm action-btn" th:onclick="'deleteNode(' + ${level.childNode.id} + ')'">Удалить</button>
+                            <button th:if="${level.childNode.isNode}" class="btn btn-primary btn-sm action-btn ms-1"
+                                    th:attr="data-bs-target='#addChildModal' + ${level.childNode.id}, data-bs-toggle='modal'">Добавить элемент</button>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления компонента -->
+    <div class="modal fade" id="addComponentModal" tabindex="-1" aria-labelledby="addComponentModalLabel">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addComponentModalLabel">Добавить компонент</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addComponentForm">
+                        <input type="hidden" name="productId" th:value="${product.id}">
+                        <div class="mb-3">
+                            <label for="componentSelect" class="form-label">Компонент</label>
+                            <select class="form-select" id="componentSelect" name="componentId" required>
+                                <option th:each="component : ${components}" th:value="${component.id}" th:text="${component.name}"></option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="componentQuantity" class="form-label">Количество</label>
+                            <input type="number" class="form-control" id="componentQuantity" name="quantity" min="1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="unitCost" class="form-label">Себестоимость за шт.</label>
+                            <select class="form-select" id="unitCost" name="unitCost" required>
+                                <option th:each="component : ${components}" th:with="firstShipment=${warehouseService.getShipmentsByComponent(component)[0]}"
+                                        th:value="${firstShipment.purchasePrice}"
+                                        th:text="${#numbers.formatDecimal(firstShipment.purchasePrice, 2, 2)} + ' руб.'"></option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Создать</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для создания узла -->
+    <div class="modal fade" id="addNodeModal" tabindex="-1" aria-labelledby="addNodeModalLabel">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addNodeModalLabel">Создать узел</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addNodeForm">
+                        <input type="hidden" name="productId" th:value="${product.id}">
+                        <div class="mb-3">
+                            <label for="nodeName" class="form-label">Имя узла</label>
+                            <input type="text" class="form-control" id="nodeName" name="nodeName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="nodeQuantity" class="form-label">Количество</label>
+                            <input type="number" class="form-control" id="nodeQuantity" name="quantity" min="1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Создать</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления дочернего элемента -->
+    <!-- Модальное окно для добавления дочернего элемента -->
+    <div th:each="level : ${hierarchy}" th:if="${level.childNode.isNode}"
+         class="modal fade" th:id="'addChildModal' + ${level.childNode.id}" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Добавить элемент в <span th:text="${level.childNode.name}"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form th:id="'addChildForm' + ${level.childNode.id}">
+                        <input type="hidden" name="parentNodeId" th:value="${level.childNode.id}">
+                        <input type="hidden" name="productId" th:value="${product.id}">
+                        <div class="mb-3">
+                            <label th:for="'childComponentSelect' + ${level.childNode.id}" class="form-label">Компонент</label>
+                            <select class="form-select" th:id="'childComponentSelect' + ${level.childNode.id}" name="componentId" required>
+                                <option th:each="component : ${components}" th:value="${component.id}" th:text="${component.name}"></option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label th:for="'childQuantity' + ${level.childNode.id}" class="form-label">Количество</label>
+                            <input type="number" class="form-control" th:id="'childQuantity' + ${level.childNode.id}" name="quantity" min="1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label th:for="'childUnitCost' + ${level.childNode.id}" class="form-label">Себестоимость за шт.</label>
+                            <select class="form-select" th:id="'childUnitCost' + ${level.childNode.id}" name="unitCost" required>
+                                <option th:each="component : ${components}" th:with="firstShipment=${warehouseService.getShipmentsByComponent(component)[0]}"
+                                        th:value="${firstShipment.purchasePrice}"
+                                        th:text="${#numbers.formatDecimal(firstShipment.purchasePrice, 2, 2)} + ' руб.'"></option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Создать</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Система складского учёта помогает управлять товарами, отслеживать запасы и анализировать финансовые показатели. Удобный интерфейс и интеграция с Ozon упрощают работу с ассортиментом.</p>
+        <p>Свяжитесь с нами: <a href="mailto:artemsmirnovsmirnov@gmail.com">artemsmirnovsmirnov@gmail.com</a></p>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    function updateQuantity(nodeId, quantity) {
+        fetch(`/hierarchy/update-quantity/${nodeId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `quantity=${quantity}`
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) location.reload();
+              else alert('Ошибка обновления количества');
+          });
+    }
+
+    function saveQuantity(nodeId) {
+        const quantity = document.getElementById(`quantity${nodeId}`).value;
+        updateQuantity(nodeId, quantity);
+    }
+
+    function updateUnitCost(nodeId, unitCost) {
+        fetch(`/hierarchy/update-unit-cost/${nodeId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `unitCost=${unitCost}`
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) location.reload();
+              else alert('Ошибка обновления себестоимости');
+          });
+    }
+
+    // Обработка форм
+    document.querySelectorAll('form[id^="addComponentForm"], form[id^="addNodeForm"], form[id^="addChildForm"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const url = this.id.includes('addComponent') ? '/hierarchy/create-component-node/' + formData.get('productId') :
+                        this.id.includes('addNode') ? '/hierarchy/create-node/' + formData.get('productId') :
+                        '/hierarchy/add-child-component/' + formData.get('parentNodeId') + '/' + formData.get('productId');
+            fetch(url, {
+                method: 'POST',
+                body: new URLSearchParams(formData)
+            }).then(response => response.text())
+              .then(data => {
+                  if (data === 'success') location.reload();
+                  else alert('Ошибка создания элемента');
+              });
+        });
+    });
+
+    function deleteNode(nodeId) {
+        if (confirm('Вы уверены, что хотите удалить этот элемент и все его подчинённые?')) {
+            fetch(`/hierarchy/delete-node/${nodeId}`, { method: 'DELETE' })
+                .then(response => response.text())
+                .then(data => {
+                    if (data === 'success') location.reload();
+                    else alert('Ошибка удаления');
+                });
+        }
+    }
+</script>
+</body>
+</html>
