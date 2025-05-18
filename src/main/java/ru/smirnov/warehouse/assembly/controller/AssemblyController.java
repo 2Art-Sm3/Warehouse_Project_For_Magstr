@@ -1,4 +1,4 @@
-package ru.smirnov.warehouse.component.controller;
+package ru.smirnov.warehouse.assembly.controller;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;

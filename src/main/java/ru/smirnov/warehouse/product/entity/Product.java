@@ -25,8 +25,6 @@ public class Product {
     private String offerId;
     @Column(nullable = false)
     private String name;
-//    @Column
-//    private String color;
     @Column
     private Integer quantityForSale; // Количество к продаже (с Ozon)
     @Column
@@ -60,7 +58,6 @@ public class Product {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
-
 
 //      @Column
 //    private Double cost; // Себестоимость (рассчитывается)

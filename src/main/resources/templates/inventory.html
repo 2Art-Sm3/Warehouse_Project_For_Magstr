@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Склад</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .table-bordered th, .table-bordered td {
+            border: 1px solid #dee2e6;
+        }
+        .table thead th {
+            border-bottom: 2px solid #dee2e6;
+            vertical-align: middle;
+        }
+        .modal-dialog {
+            max-width: 400px;
+        }
+        .product-table {
+            width: 80%;
+            margin-bottom: 20px;
+        }
+        .component-table {
+            width: 60%;
+            margin-left: 20%;
+            font-size: 12px;
+            line-height: 1.2;
+        }
+        .shipment-table {
+            display: none;
+            font-size: 12px;
+            line-height: 1.2;
+            margin-left: 20%;
+            width: 60%;
+        }
+        .create-component-btn {
+            position: absolute;
+            top: 100px;
+            right: 50px;
+        }
+        .footer {
+            margin-top: 50px;
+            padding: 20px 0;
+            background-color: rgba(233, 236, 239, 0.9);
+            text-align: center;
+            border: 1px solid #ced4da;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4>Складской учет</h4>
+        <div>
+            <a href="/dashboard" class="btn btn-info">Вернуться в главное меню</a>
+        </div>
+    </div>
+
+    <h2>Склад</h2>
+
+    <!-- Кнопка для создания компонента -->
+    <button type="button" class="btn btn-primary create-component-btn" data-bs-toggle="modal" data-bs-target="#createComponentModal">
+        Создать компонент
+    </button>
+
+    <!-- Таблицы для каждого товара -->
+    <div th:each="product, iterStat : ${products}">
+        <table class="table table-striped table-bordered product-table">
+            <thead>
+            <tr>
+                <th style="width: 10%;">№</th>
+                <th style="width: 70%;">Наименование</th>
+                <th style="width: 20%;">Кол-во</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td th:text="${iterStat.count}"></td>
+                <td th:text="${product.name}"></td>
+                <td th:text="${warehouseService.calculateTotalQuantity(product)}"></td>
+            </tr>
+            </tbody>
+        </table>
+
+        <!-- Таблицы компонентов для каждого товара -->
+        <div th:each="component, compStat : ${warehouseService.getComponentsByProduct(product)}">
+            <table class="table table-striped table-bordered component-table">
+                <thead>
+                <tr>
+                    <th style="width: 10%;">№</th>
+                    <th style="width: 60%;">Название</th>
+                    <th style="width: 20%;">Кол-во</th>
+                    <th style="width: 10%;">Действия</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td th:text="${compStat.count}"></td>
+                    <td th:text="${component.name}"></td>
+                    <td th:text="${component.quantity}"></td>
+                    <td>
+                        <button type="button" class="btn btn-link btn-sm" th:attr="data-bs-target='#shipmentModal' + ${product.id} + '-' + ${component.id}, data-bs-toggle='modal'">Создать поставку</button>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+
+            <!-- Раскрывающаяся таблица для партий -->
+            <table class="table table-striped table-bordered shipment-table" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id} + 'Table'">
+                <thead>
+                <tr>
+                    <th style="width: 10%;">№</th>
+                    <th style="width: 30%;">Себестоимость</th>
+                    <th style="width: 30%;">Кол-во</th>
+                    <th style="width: 30%;">Дата</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}">
+                    <td th:text="${shipStat.count}"></td>
+                    <td th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></td>
+                    <td th:text="${shipment.quantity}"></td>
+                    <td th:text="${#temporals.format(shipment.purchaseDate, 'dd.MM.yyyy')}"></td>
+                </tr>
+                </tbody>
+            </table>
+            <button type="button" class="btn btn-link btn-sm" th:attr="data-bs-target='#shipmentModal' + ${product.id} + '-' + ${component.id} + 'Table', data-bs-toggle='collapse'">Партии</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно для создания компонента -->
+    <div class="modal fade" id="createComponentModal" tabindex="-1" aria-labelledby="createComponentModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createComponentModalLabel">Создать компонент</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form th:action="@{/inventory/create-component}" method="post">
+                        <div class="mb-3">
+                            <label for="componentName" class="form-label">Название компонента</label>
+                            <input type="text" class="form-control" id="componentName" name="componentName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="productId" class="form-label">Товар</label>
+                            <select class="form-control" id="productId" name="productId" required>
+                                <option th:each="product : ${products}" th:value="${product.id}" th:text="${product.name}"></option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для создания поставки -->
+    <div th:each="product : ${products}">
+        <div th:each="component : ${warehouseService.getComponentsByProduct(product)}">
+            <div class="modal fade" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="shipmentModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Создать поставку для <span th:text="${component.name}"></span></h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form th:action="@{/inventory/create-shipment}" method="post">
+                                <input type="hidden" name="componentId" th:value="${component.id}">
+                                <div class="mb-3">
+                                    <label for="purchasePrice" class="form-label">Себестоимость (руб.)</label>
+                                    <input type="number" class="form-control" id="purchasePrice" name="purchasePrice" step="0.01" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="quantity" class="form-label">Количество</label>
+                                    <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="purchaseDate" class="form-label">Дата закупки</label>
+                                    <input type="date" class="form-control" id="purchaseDate" name="purchaseDate" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Сохранить</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Полоса с информацией внизу -->
+<div class="footer">
+    <p>Система складского учёта помогает управлять товарами, отслеживать запасы и анализировать финансовые показатели. Удобный интерфейс и интеграция с Ozon упрощают работу с ассортиментом.</p>
+    <p>Свяжитесь с нами: <a href="mailto:artemsmirnovsmirnov@gmail.com">artemsmirnovsmirnov@gmail.com</a></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.querySelectorAll('.btn[data-bs-toggle="collapse"]').forEach(button => {
+        button.addEventListener('click', function () {
+            const target = this.getAttribute('data-bs-target');
+            const table = document.querySelector(target);
+            table.style.display = table.style.display === 'none' ? 'table' : 'none';
+        });
+    });
+</script>
+</body>
+</html>
+
+
+
+<!--<!DOCTYPE html>-->
+<!--<html xmlns:th="http://www.thymeleaf.org">-->
+<!--<head>-->
+<!--    <title>Склад</title>-->
+<!--    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">-->
+<!--    <style>-->
+<!--        .table-bordered th, .table-bordered td {-->
+<!--            border: 1px solid #dee2e6;-->
+<!--        }-->
+<!--        .table thead th {-->
+<!--            border-bottom: 2px solid #dee2e6;-->
+<!--            vertical-align: middle;-->
+<!--        }-->
+<!--        .modal-dialog {-->
+<!--            max-width: 400px;-->
+<!--        }-->
+<!--        .product-table {-->
+<!--            width: 80%;-->
+<!--            margin-bottom: 20px;-->
+<!--        }-->
+<!--        .component-table {-->
+<!--            width: 60%;-->
+<!--            margin-left: 20%;-->
+<!--            font-size: 12px;-->
+<!--            line-height: 1.2;-->
+<!--        }-->
+<!--        .shipment-table {-->
+<!--            display: none;-->
+<!--            font-size: 12px;-->
+<!--            line-height: 1.2;-->
+<!--            margin-left: 20%;-->
+<!--            width: 60%;-->
+<!--        }-->
+<!--        .create-component-btn {-->
+<!--            position: absolute;-->
+<!--            top: 100px;-->
+<!--            right: 50px;-->
+<!--        }-->
+<!--        .footer {-->
+<!--            margin-top: 50px;-->
+<!--            padding: 20px 0;-->
+<!--            background-color: rgba(233, 236, 239, 0.9);-->
+<!--            text-align: center;-->
+<!--            border: 1px solid #ced4da;-->
+<!--            font-size: 13px;-->
+<!--        }-->
+<!--    </style>-->
+<!--</head>-->
+<!--<body>-->
+<!--<div class="container mt-3">-->
+<!--    <div class="d-flex justify-content-between align-items-center mb-4">-->
+<!--        <h4>Складской учет</h4>-->
+<!--        <div>-->
+<!--            <a href="/dashboard" class="btn btn-info">Вернуться в главное меню</a>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    <h2>Склад</h2>-->
+
+<!--    &lt;!&ndash; Кнопка для создания компонента &ndash;&gt;-->
+<!--    <button type="button" class="btn btn-primary create-component-btn" data-bs-toggle="modal" data-bs-target="#createComponentModal">-->
+<!--        Создать компонент-->
+<!--    </button>-->
+
+<!--    &lt;!&ndash; Таблицы для каждого товара &ndash;&gt;-->
+<!--    <div th:each="product, iterStat : ${products}">-->
+<!--        <table class="table table-striped table-bordered product-table">-->
+<!--            <thead>-->
+<!--            <tr>-->
+<!--                <th style="width: 10%;">№</th>-->
+<!--                <th style="width: 70%;">Наименование</th>-->
+<!--                <th style="width: 20%;">Кол-во</th>-->
+<!--            </tr>-->
+<!--            </thead>-->
+<!--            <tbody>-->
+<!--            <tr>-->
+<!--                <td th:text="${iterStat.count}"></td>-->
+<!--                <td th:text="${product.name}"></td>-->
+<!--                <td th:text="${warehouseService.calculateTotalQuantity(product)}"></td>-->
+<!--            </tr>-->
+<!--            </tbody>-->
+<!--        </table>-->
+
+<!--        &lt;!&ndash; Таблицы компонентов для каждого товара &ndash;&gt;-->
+<!--        <div th:each="component, compStat : ${warehouseService.getComponentsByProduct(product)}">-->
+<!--            <table class="table table-striped table-bordered component-table">-->
+<!--                <thead>-->
+<!--                <tr>-->
+<!--                    <th style="width: 10%;">№</th>-->
+<!--                    <th style="width: 60%;">Название</th>-->
+<!--                    <th style="width: 20%;">Кол-во</th>-->
+<!--                    <th style="width: 10%;">Действия</th>-->
+<!--                </tr>-->
+<!--                </thead>-->
+<!--                <tbody>-->
+<!--                <tr>-->
+<!--                    <td th:text="${compStat.count}"></td>-->
+<!--                    <td th:text="${component.name}"></td>-->
+<!--                    <td th:text="${component.quantity}"></td>-->
+<!--                    <td>-->
+<!--                        <button type="button" class="btn btn-link btn-sm" th:attr="data-bs-target='#shipmentModal' + ${product.id} + '-' + ${component.id}, data-bs-toggle='modal'">Создать поставку</button>-->
+<!--                    </td>-->
+<!--                </tr>-->
+<!--                </tbody>-->
+<!--            </table>-->
+
+<!--            &lt;!&ndash; Раскрывающаяся таблица для партий &ndash;&gt;-->
+<!--            <table class="table table-striped table-bordered shipment-table" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id} + 'Table'">-->
+<!--                <thead>-->
+<!--                <tr>-->
+<!--                    <th style="width: 10%;">№</th>-->
+<!--                    <th style="width: 30%;">Себестоимость</th>-->
+<!--                    <th style="width: 30%;">Кол-во</th>-->
+<!--                    <th style="width: 30%;">Дата</th>-->
+<!--                </tr>-->
+<!--                </thead>-->
+<!--                <tbody>-->
+<!--                <tr th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}">-->
+<!--                    <td th:text="${shipStat.count}"></td>-->
+<!--                    <td th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></td>-->
+<!--                    <td th:text="${shipment.quantity}"></td>-->
+<!--                    <td th:text="${#temporals.format(shipment.purchaseDate, 'dd.MM.yyyy')}"></td>-->
+<!--                </tr>-->
+<!--                </tbody>-->
+<!--            </table>-->
+<!--            <button type="button" class="btn btn-link btn-sm" th:attr="data-bs-target='#shipmentModal' + ${product.id} + '-' + ${component.id} + 'Table', data-bs-toggle='collapse'">Партии</button>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Модальное окно для создания компонента &ndash;&gt;-->
+<!--    <div class="modal fade" id="createComponentModal" tabindex="-1" aria-labelledby="createComponentModalLabel" aria-hidden="true">-->
+<!--        <div class="modal-dialog">-->
+<!--            <div class="modal-content">-->
+<!--                <div class="modal-header">-->
+<!--                    <h5 class="modal-title" id="createComponentModalLabel">Создать компонент</h5>-->
+<!--                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                </div>-->
+<!--                <div class="modal-body">-->
+<!--                    <form th:action="@{/inventory/create-component}" method="post">-->
+<!--                        <div class="mb-3">-->
+<!--                            <label for="componentName" class="form-label">Название компонента</label>-->
+<!--                            <input type="text" class="form-control" id="componentName" name="componentName" required>-->
+<!--                        </div>-->
+<!--                        <div class="mb-3">-->
+<!--                            <label for="productId" class="form-label">Товар</label>-->
+<!--                            <select class="form-control" id="productId" name="productId" required>-->
+<!--                                <option th:each="product : ${products}" th:value="${product.id}" th:text="${product.name}"></option>-->
+<!--                            </select>-->
+<!--                        </div>-->
+<!--                        <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                    </form>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Модальное окно для создания поставки &ndash;&gt;-->
+<!--    <div th:each="product, iterStat : ${products}" th:each="component, compStat : ${warehouseService.getComponentsByProduct(product)}">-->
+<!--        <div class="modal fade" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="shipmentModalLabel" aria-hidden="true">-->
+<!--            <div class="modal-dialog">-->
+<!--                <div class="modal-content">-->
+<!--                    <div class="modal-header">-->
+<!--                        <h5 class="modal-title">Создать поставку для <span th:text="${component.name}"></span></h5>-->
+<!--                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                    </div>-->
+<!--                    <div class="modal-body">-->
+<!--                        <form th:action="@{/inventory/create-shipment}" method="post">-->
+<!--                            <input type="hidden" name="componentId" th:value="${component.id}">-->
+<!--                            <div class="mb-3">-->
+<!--                                <label for="purchasePrice" class="form-label">Себестоимость (руб.)</label>-->
+<!--                                <input type="number" class="form-control" id="purchasePrice" name="purchasePrice" step="0.01" required>-->
+<!--                            </div>-->
+<!--                            <div class="mb-3">-->
+<!--                                <label for="quantity" class="form-label">Количество</label>-->
+<!--                                <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>-->
+<!--                            </div>-->
+<!--                            <div class="mb-3">-->
+<!--                                <label for="purchaseDate" class="form-label">Дата закупки</label>-->
+<!--                                <input type="date" class="form-control" id="purchaseDate" name="purchaseDate" required>-->
+<!--                            </div>-->
+<!--                            <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                        </form>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+<!--</div>-->
+
+<!--&lt;!&ndash; Полоса с информацией внизу &ndash;&gt;-->
+<!--<div class="footer">-->
+<!--    <p>Система складского учёта помогает управлять товарами, отслеживать запасы и анализировать финансовые показатели. Удобный интерфейс и интеграция с Ozon упрощают работу с ассортиментом.</p>-->
+<!--    <p>Свяжитесь с нами: <a href="mailto:artemsmirnovsmirnov@gmail.com">artemsmirnovsmirnov@gmail.com</a></p>-->
+<!--</div>-->
+
+<!--<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>-->
+<!--<script>-->
+<!--    document.querySelectorAll('.btn[data-bs-toggle="collapse"]').forEach(button => {-->
+<!--        button.addEventListener('click', function () {-->
+<!--            const target = this.getAttribute('data-bs-target');-->
+<!--            const table = document.querySelector(target);-->
+<!--            table.style.display = table.style.display === 'none' ? 'table' : 'none';-->
+<!--        });-->
+<!--    });-->
+<!--</script>-->
+<!--</body>-->
+<!--</html>-->
+
+
+<!--&lt;!&ndash;<!DOCTYPE html>&ndash;&gt;-->
+<!--&lt;!&ndash;<html xmlns:th="http://www.thymeleaf.org">&ndash;&gt;-->
+<!--&lt;!&ndash;<head>&ndash;&gt;-->
+<!--&lt;!&ndash;    <title>Склад</title>&ndash;&gt;-->
+<!--&lt;!&ndash;    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">&ndash;&gt;-->
+<!--&lt;!&ndash;    <style>&ndash;&gt;-->
+<!--&lt;!&ndash;        .table-bordered th, .table-bordered td {&ndash;&gt;-->
+<!--&lt;!&ndash;            border: 1px solid #dee2e6;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+<!--&lt;!&ndash;        .table thead th {&ndash;&gt;-->
+<!--&lt;!&ndash;            border-bottom: 2px solid #dee2e6;&ndash;&gt;-->
+<!--&lt;!&ndash;            vertical-align: middle;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+<!--&lt;!&ndash;        .modal-dialog {&ndash;&gt;-->
+<!--&lt;!&ndash;            max-width: 400px;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+<!--&lt;!&ndash;        .product-table {&ndash;&gt;-->
+<!--&lt;!&ndash;            width: 80%;&ndash;&gt;-->
+<!--&lt;!&ndash;            margin-bottom: 20px;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+<!--&lt;!&ndash;        .component-table {&ndash;&gt;-->
+<!--&lt;!&ndash;            width: 60%;&ndash;&gt;-->
+<!--&lt;!&ndash;            margin-left: 20%;&ndash;&gt;-->
+<!--&lt;!&ndash;            font-size: 12px;&ndash;&gt;-->
+<!--&lt;!&ndash;            line-height: 1.2;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+<!--&lt;!&ndash;        .shipment-table {&ndash;&gt;-->
+<!--&lt;!&ndash;            display: none;&ndash;&gt;-->
+<!--&lt;!&ndash;            font-size: 12px;&ndash;&gt;-->
+<!--&lt;!&ndash;            line-height: 1.2;&ndash;&gt;-->
+<!--&lt;!&ndash;            margin-left: 20%;&ndash;&gt;-->
+<!--&lt;!&ndash;            width: 60%;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+<!--&lt;!&ndash;        .create-component-btn {&ndash;&gt;-->
+<!--&lt;!&ndash;            position: absolute;&ndash;&gt;-->
+<!--&lt;!&ndash;            top: 100px;&ndash;&gt;-->
+<!--&lt;!&ndash;            right: 50px;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+<!--&lt;!&ndash;        .footer {&ndash;&gt;-->
+<!--&lt;!&ndash;            margin-top: 50px;&ndash;&gt;-->
+<!--&lt;!&ndash;            padding: 20px 0;&ndash;&gt;-->
+<!--&lt;!&ndash;            background-color: #343a40;&ndash;&gt;-->
+<!--&lt;!&ndash;            text-align: center;&ndash;&gt;-->
+<!--&lt;!&ndash;            color: white;&ndash;&gt;-->
+<!--&lt;!&ndash;            width: 100%;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+<!--&lt;!&ndash;    </style>&ndash;&gt;-->
+<!--&lt;!&ndash;</head>&ndash;&gt;-->
+<!--&lt;!&ndash;<body>&ndash;&gt;-->
+<!--&lt;!&ndash;<div class="container mt-3">&ndash;&gt;-->
+<!--&lt;!&ndash;    <div class="d-flex justify-content-between align-items-center mb-4">&ndash;&gt;-->
+<!--&lt;!&ndash;        <h4>Складской учет</h4>&ndash;&gt;-->
+<!--&lt;!&ndash;        <div>&ndash;&gt;-->
+<!--&lt;!&ndash;            <a href="/dashboard" class="btn btn-info">Вернуться в главное меню</a>&ndash;&gt;-->
+<!--&lt;!&ndash;        </div>&ndash;&gt;-->
+<!--&lt;!&ndash;    </div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    <h2>Склад</h2>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    &lt;!&ndash; Кнопка для создания компонента &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;    <button type="button" class="btn btn-primary create-component-btn" data-bs-toggle="modal" data-bs-target="#createComponentModal">&ndash;&gt;-->
+<!--&lt;!&ndash;        Создать компонент&ndash;&gt;-->
+<!--&lt;!&ndash;    </button>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    &lt;!&ndash; Таблицы для каждого товара &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;    <div th:each="product, iterStat : ${products}">&ndash;&gt;-->
+<!--&lt;!&ndash;        <table class="table table-striped table-bordered product-table">&ndash;&gt;-->
+<!--&lt;!&ndash;            <thead>&ndash;&gt;-->
+<!--&lt;!&ndash;            <tr>&ndash;&gt;-->
+<!--&lt;!&ndash;                <th style="width: 10%;">№</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                <th style="width: 70%;">Наименование</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                <th style="width: 20%;">Кол-во</th>&ndash;&gt;-->
+<!--&lt;!&ndash;            </tr>&ndash;&gt;-->
+<!--&lt;!&ndash;            </thead>&ndash;&gt;-->
+<!--&lt;!&ndash;            <tbody>&ndash;&gt;-->
+<!--&lt;!&ndash;            <tr>&ndash;&gt;-->
+<!--&lt;!&ndash;                <td th:text="${iterStat.count}"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;                <td th:text="${product.name}"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;                <td th:text="${warehouseService.calculateTotalQuantity(product)}"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;            </tr>&ndash;&gt;-->
+<!--&lt;!&ndash;            </tbody>&ndash;&gt;-->
+<!--&lt;!&ndash;        </table>&ndash;&gt;-->
+
+<!--&lt;!&ndash;        &lt;!&ndash; Таблицы компонентов для каждого товара &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;        <div th:each="component, compStat : ${warehouseService.getComponentsByProduct(product)}">&ndash;&gt;-->
+<!--&lt;!&ndash;            <table class="table table-striped table-bordered component-table">&ndash;&gt;-->
+<!--&lt;!&ndash;                <thead>&ndash;&gt;-->
+<!--&lt;!&ndash;                <tr>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <th style="width: 10%;">№</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <th style="width: 60%;">Название</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <th style="width: 20%;">Кол-во</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <th style="width: 10%;">Действия</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                </tr>&ndash;&gt;-->
+<!--&lt;!&ndash;                </thead>&ndash;&gt;-->
+<!--&lt;!&ndash;                <tbody>&ndash;&gt;-->
+<!--&lt;!&ndash;                <tr>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <td th:text="${compStat.count}"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <td th:text="${component.name}"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <td th:text="${component.quantity}"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <td>&ndash;&gt;-->
+<!--&lt;!&ndash;                        <button type="button" class="btn btn-link btn-sm" th:attr="data-bs-target='#shipmentModal' + ${product.id} + '-' + ${component.id}, data-bs-toggle='modal'">Создать поставку</button>&ndash;&gt;-->
+<!--&lt;!&ndash;                    </td>&ndash;&gt;-->
+<!--&lt;!&ndash;                </tr>&ndash;&gt;-->
+<!--&lt;!&ndash;                </tbody>&ndash;&gt;-->
+<!--&lt;!&ndash;            </table>&ndash;&gt;-->
+
+<!--&lt;!&ndash;            &lt;!&ndash; Раскрывающаяся таблица для партий &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;            <table class="table table-striped table-bordered shipment-table" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id} + 'Table'">&ndash;&gt;-->
+<!--&lt;!&ndash;                <thead>&ndash;&gt;-->
+<!--&lt;!&ndash;                <tr>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <th style="width: 10%;">№</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <th style="width: 30%;">Себестоимость</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <th style="width: 30%;">Кол-во</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <th style="width: 30%;">Дата</th>&ndash;&gt;-->
+<!--&lt;!&ndash;                </tr>&ndash;&gt;-->
+<!--&lt;!&ndash;                </thead>&ndash;&gt;-->
+<!--&lt;!&ndash;                <tbody>&ndash;&gt;-->
+<!--&lt;!&ndash;                <tr th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}">&ndash;&gt;-->
+<!--&lt;!&ndash;                    <td th:text="${shipStat.count}"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <td th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <td th:text="${shipment.quantity}"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <td th:text="${#temporals.format(shipment.purchaseDate, 'dd.MM.yyyy')}"></td>&ndash;&gt;-->
+<!--&lt;!&ndash;                </tr>&ndash;&gt;-->
+<!--&lt;!&ndash;                </tbody>&ndash;&gt;-->
+<!--&lt;!&ndash;            </table>&ndash;&gt;-->
+<!--&lt;!&ndash;            <button type="button" class="btn btn-link btn-sm" th:attr="data-bs-target='#shipmentModal' + ${product.id} + '-' + ${component.id} + 'Table', data-bs-toggle='collapse'">Партии</button>&ndash;&gt;-->
+<!--&lt;!&ndash;        </div>&ndash;&gt;-->
+<!--&lt;!&ndash;    </div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    &lt;!&ndash; Модальное окно для создания компонента &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;    <div class="modal fade" id="createComponentModal" tabindex="-1" aria-labelledby="createComponentModalLabel" aria-hidden="true">&ndash;&gt;-->
+<!--&lt;!&ndash;        <div class="modal-dialog">&ndash;&gt;-->
+<!--&lt;!&ndash;            <div class="modal-content">&ndash;&gt;-->
+<!--&lt;!&ndash;                <div class="modal-header">&ndash;&gt;-->
+<!--&lt;!&ndash;                    <h5 class="modal-title" id="createComponentModalLabel">Создать компонент</h5>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>&ndash;&gt;-->
+<!--&lt;!&ndash;                </div>&ndash;&gt;-->
+<!--&lt;!&ndash;                <div class="modal-body">&ndash;&gt;-->
+<!--&lt;!&ndash;                    <form th:action="@{/inventory/create-component}" method="post">&ndash;&gt;-->
+<!--&lt;!&ndash;                        <div class="mb-3">&ndash;&gt;-->
+<!--&lt;!&ndash;                            <label for="componentName" class="form-label">Название компонента</label>&ndash;&gt;-->
+<!--&lt;!&ndash;                            <input type="text" class="form-control" id="componentName" name="componentName" required>&ndash;&gt;-->
+<!--&lt;!&ndash;                        </div>&ndash;&gt;-->
+<!--&lt;!&ndash;                        <div class="mb-3">&ndash;&gt;-->
+<!--&lt;!&ndash;                            <label for="productId" class="form-label">Товар</label>&ndash;&gt;-->
+<!--&lt;!&ndash;                            <select class="form-control" id="productId" name="productId" required>&ndash;&gt;-->
+<!--&lt;!&ndash;                                <option th:each="product : ${products}" th:value="${product.id}" th:text="${product.name}"></option>&ndash;&gt;-->
+<!--&lt;!&ndash;                            </select>&ndash;&gt;-->
+<!--&lt;!&ndash;                        </div>&ndash;&gt;-->
+<!--&lt;!&ndash;                        <button type="submit" class="btn btn-primary">Сохранить</button>&ndash;&gt;-->
+<!--&lt;!&ndash;                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>&ndash;&gt;-->
+<!--&lt;!&ndash;                    </form>&ndash;&gt;-->
+<!--&lt;!&ndash;                </div>&ndash;&gt;-->
+<!--&lt;!&ndash;            </div>&ndash;&gt;-->
+<!--&lt;!&ndash;        </div>&ndash;&gt;-->
+<!--&lt;!&ndash;    </div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    &lt;!&ndash; Модальное окно для создания поставки &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;    <div th:each="product, iterStat : ${products}" th:each="component, compStat : ${warehouseService.getComponentsByProduct(product)}">&ndash;&gt;-->
+<!--&lt;!&ndash;        <div class="modal fade" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="shipmentModalLabel" aria-hidden="true">&ndash;&gt;-->
+<!--&lt;!&ndash;            <div class="modal-dialog">&ndash;&gt;-->
+<!--&lt;!&ndash;                <div class="modal-content">&ndash;&gt;-->
+<!--&lt;!&ndash;                    <div class="modal-header">&ndash;&gt;-->
+<!--&lt;!&ndash;                        <h5 class="modal-title">Создать поставку для <span th:text="${component.name}"></span></h5>&ndash;&gt;-->
+<!--&lt;!&ndash;                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>&ndash;&gt;-->
+<!--&lt;!&ndash;                    </div>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <div class="modal-body">&ndash;&gt;-->
+<!--&lt;!&ndash;                        <form th:action="@{/inventory/create-shipment}" method="post">&ndash;&gt;-->
+<!--&lt;!&ndash;                            <input type="hidden" name="componentId" th:value="${component.id}">&ndash;&gt;-->
+<!--&lt;!&ndash;                            <div class="mb-3">&ndash;&gt;-->
+<!--&lt;!&ndash;                                <label for="purchasePrice" class="form-label">Себестоимость (руб.)</label>&ndash;&gt;-->
+<!--&lt;!&ndash;                                <input type="number" class="form-control" id="purchasePrice" name="purchasePrice" step="0.01" required>&ndash;&gt;-->
+<!--&lt;!&ndash;                            </div>&ndash;&gt;-->
+<!--&lt;!&ndash;                            <div class="mb-3">&ndash;&gt;-->
+<!--&lt;!&ndash;                                <label for="quantity" class="form-label">Количество</label>&ndash;&gt;-->
+<!--&lt;!&ndash;                                <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>&ndash;&gt;-->
+<!--&lt;!&ndash;                            </div>&ndash;&gt;-->
+<!--&lt;!&ndash;                            <div class="mb-3">&ndash;&gt;-->
+<!--&lt;!&ndash;                                <label for="purchaseDate" class="form-label">Дата закупки</label>&ndash;&gt;-->
+<!--&lt;!&ndash;                                <input type="date" class="form-control" id="purchaseDate" name="purchaseDate" required>&ndash;&gt;-->
+<!--&lt;!&ndash;                            </div>&ndash;&gt;-->
+<!--&lt;!&ndash;                            <button type="submit" class="btn btn-primary">Сохранить</button>&ndash;&gt;-->
+<!--&lt;!&ndash;                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>&ndash;&gt;-->
+<!--&lt;!&ndash;                        </form>&ndash;&gt;-->
+<!--&lt;!&ndash;                    </div>&ndash;&gt;-->
+<!--&lt;!&ndash;                </div>&ndash;&gt;-->
+<!--&lt;!&ndash;            </div>&ndash;&gt;-->
+<!--&lt;!&ndash;        </div>&ndash;&gt;-->
+<!--&lt;!&ndash;    </div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    &lt;!&ndash; Полоса с информацией внизу &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;    <div class="footer mt-5 py-3 bg-dark text-white text-center w-100">&ndash;&gt;-->
+<!--&lt;!&ndash;        <p>Система складского учёта помогает управлять товарами, отслеживать запасы и анализировать финансовые показатели. Удобный интерфейс и интеграция с Ozon упрощают работу с ассортиментом.</p>&ndash;&gt;-->
+<!--&lt;!&ndash;        <p>Свяжитесь с нами: <a href="mailto:artemsmirnovsmirnov@gmail.com" class="text-white">artemsmirnovsmirnov@gmail.com</a></p>&ndash;&gt;-->
+<!--&lt;!&ndash;    </div>&ndash;&gt;-->
+<!--&lt;!&ndash;</div>&ndash;&gt;-->
+<!--&lt;!&ndash;<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>&ndash;&gt;-->
+<!--&lt;!&ndash;<script>&ndash;&gt;-->
+<!--&lt;!&ndash;    document.querySelectorAll('.btn[data-bs-toggle="collapse"]').forEach(button => {&ndash;&gt;-->
+<!--&lt;!&ndash;        button.addEventListener('click', function () {&ndash;&gt;-->
+<!--&lt;!&ndash;            const target = this.getAttribute('data-bs-target');&ndash;&gt;-->
+<!--&lt;!&ndash;            const table = document.querySelector(target);&ndash;&gt;-->
+<!--&lt;!&ndash;            table.style.display = table.style.display === 'none' ? 'table' : 'none';&ndash;&gt;-->
+<!--&lt;!&ndash;        });&ndash;&gt;-->
+<!--&lt;!&ndash;    });&ndash;&gt;-->
+<!--&lt;!&ndash;</script>&ndash;&gt;-->
+<!--&lt;!&ndash;</body>&ndash;&gt;-->
+<!--&lt;!&ndash;</html>&ndash;&gt;-->

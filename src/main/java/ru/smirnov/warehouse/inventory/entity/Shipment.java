@@ -5,7 +5,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import ru.smirnov.warehouse.component.entity.Part;
 
 import java.time.LocalDateTime;
 
@@ -14,23 +13,23 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 @Entity
-@Table(name = "warehouse_stock")
-public class WarehouseStock {
+@Table(name = "shipments")
+public class Shipment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false)
-    private Integer quantity;
-
-    @Column(nullable = false)
     private Double purchasePrice;
 
     @Column(nullable = false)
-    private LocalDateTime purchaseDate; // Дата закупки для определения старой партии
+    private Integer quantity;
 
-    @ManyToOne
-    @JoinColumn(name = "part_id", nullable = false)
-    private Part part;
+    @Column(nullable = false)
+    private LocalDateTime purchaseDate;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "component_id", nullable = false)
+    private Component component;
 }

@@ -63,29 +63,4 @@ public class DashboardController {
         return "redirect:/dashboard";
     }
 
-    /*
-    // Пример метода для подсчёта товаров с низким запасом (требуется реализация логики)
-    private int calculateLowStockItems() {
-        return (int) productService.getAllProducts().stream()
-                .filter(p -> p.getQuantityForSale() != null && p.getQuantityForSale() < 10)
-                .count();
-    }
-
-    // Пример метода для расчёта общей выручки (требуется интеграция с транзакциями)
-    private double calculateTotalRevenue() {
-        return productService.getAllProducts().stream()
-                .filter(p -> p.getPrice() != null && p.getSoldQuantity() != null)
-                .mapToDouble(p -> p.getPrice() * p.getSoldQuantity())
-                .sum();
-    }
-
-    // Пример метода для расчёта средней комиссии (требуется интеграция с Ozon)
-    private double calculateAverageCommission() {
-        return productService.getAllProducts().stream()
-                .filter(p -> p.getOzonCommissions() != null && p.getPrice() != null && p.getPrice() > 0)
-                .mapToDouble(p -> (p.getOzonCommissions() / p.getPrice()) * 100)
-                .average()
-                .orElse(0.0);
-    }
-    */
 }
