@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface ShipmentRepository extends JpaRepository<Shipment, Long> {
     List<Shipment> findByComponentId(Long componentId);
+
+    void deleteByComponentId(Long componentId);
 }

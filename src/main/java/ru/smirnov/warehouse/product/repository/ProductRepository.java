@@ -18,4 +18,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     List<Product> findByUser(User currentUser);
 
     List<Product> findByUser(User user, Sort sort);
+
+    List<Product> findByUserUsername(String username);
 }
