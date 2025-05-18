@@ -1,13 +1,20 @@
 package ru.smirnov.warehouse.inventory.controller;
 
+import jakarta.transaction.Transactional;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import ru.smirnov.warehouse.inventory.entity.Component;
+import ru.smirnov.warehouse.inventory.entity.Shipment;
 import ru.smirnov.warehouse.inventory.service.WarehouseService;
 import ru.smirnov.warehouse.product.repository.ProductRepository;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Controller
 @RequestMapping("/inventory")
@@ -30,44 +37,82 @@ public class InventoryController {
     }
 
     @PostMapping("/create-component")
-    public String createComponent(@RequestParam String componentName, @RequestParam Long productId) {
+    @ResponseBody
+    public Map<String, Boolean> createComponent(@RequestParam String componentName, @RequestParam Long productId) {
         warehouseService.createComponent(componentName, productId);
-        return "redirect:/inventory";
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("success", true);
+        return response;
     }
 
     @PostMapping("/create-shipment")
-    public String createShipment(@RequestParam Long componentId, @RequestParam Double purchasePrice,
-                                 @RequestParam Integer quantity, @RequestParam String purchaseDate) {
+    @ResponseBody
+    public Map<String, Boolean> createShipment(@RequestParam Long componentId, @RequestParam Double purchasePrice,
+                                               @RequestParam Integer quantity, @RequestParam String purchaseDate) {
         LocalDateTime date = LocalDateTime.parse(purchaseDate + "T00:00:00");
         warehouseService.createShipment(componentId, purchasePrice, quantity, date);
-        return "redirect:/inventory";
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("success", true);
+        return response;
     }
 
     @PostMapping("/edit-component")
-    public String editComponent(@RequestParam Long componentId, @RequestParam String componentName) {
-        // Логика редактирования компонента (допишите в WarehouseService)
-        return "redirect:/inventory";
+    @ResponseBody
+    public Map<String, Boolean> editComponent(@RequestParam Long componentId, @RequestParam String componentName) {
+        warehouseService.editComponent(componentId, componentName);
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("success", true);
+        return response;
     }
 
     @PostMapping("/edit-shipment")
-    public String editShipment(@RequestParam Long shipmentId, @RequestParam Double purchasePrice,
-                               @RequestParam Integer quantity, @RequestParam String purchaseDate) {
+    @ResponseBody
+    public Map<String, Boolean> editShipment(@RequestParam Long shipmentId, @RequestParam Double purchasePrice,
+                                             @RequestParam Integer quantity, @RequestParam String purchaseDate) {
         LocalDateTime date = LocalDateTime.parse(purchaseDate + "T00:00:00");
-        // Логика редактирования поставки (допишите в WarehouseService)
-        return "redirect:/inventory";
+        warehouseService.editShipment(shipmentId, purchasePrice, quantity, date);
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("success", true);
+        return response;
     }
 
     @DeleteMapping("/delete-component/{componentId}")
     @ResponseBody
-    public String deleteComponent(@PathVariable Long componentId, @RequestParam Long productId) {
-        // Логика удаления компонента и всех его поставок (допишите в WarehouseService)
-        return "success";
+    @Transactional
+    public ResponseEntity<Map<String, Boolean>> deleteComponent(@PathVariable Long componentId, @RequestParam Long productId) {
+        warehouseService.deleteComponent(componentId);
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("success", true);
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/delete-shipment/{shipmentId}")
     @ResponseBody
-    public String deleteShipment(@PathVariable Long shipmentId, @RequestParam Long componentId) {
-        // Логика удаления поставки (допишите в WarehouseService)
-        return "success";
+    @Transactional
+    public ResponseEntity<Map<String, Boolean>> deleteShipment(@PathVariable Long shipmentId, @RequestParam Long componentId) {
+        warehouseService.deleteShipment(shipmentId);
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("success", true);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/component-quantity/{componentId}")
+    @ResponseBody
+    public Map<String, Integer> getComponentQuantity(@PathVariable Long componentId) {
+        Component component = warehouseService.getComponentById(componentId);
+        int quantity = warehouseService.calculateComponentQuantity(component);
+        Map<String, Integer> response = new HashMap<>();
+        response.put("quantity", quantity);
+        return response;
+    }
+
+    @GetMapping("/shipments/{componentId}")
+    public String getShipmentsFragment(@PathVariable Long componentId, @RequestParam Long productId, Model model) {
+        Component component = warehouseService.getComponentById(componentId);
+        List<Shipment> shipments = warehouseService.getShipmentsByComponent(component);
+        model.addAttribute("shipments", shipments);
+        model.addAttribute("component", component);
+        model.addAttribute("product", productRepository.findById(productId).orElseThrow());
+        return "fragments/shipments :: shipmentTable";
     }
 }

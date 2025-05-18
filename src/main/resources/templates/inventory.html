@@ -58,11 +58,17 @@
     </button>
 
     <!-- Таблицы для каждого товара -->
-    <div th:each="product, iterStat : ${products}">
+    <div th:each="product, prodStat : ${products}">
         <table class="table table-striped table-bordered product-table">
+            <thead>
+            <tr>
+                <th style="width: 10%;">#</th>
+                <th style="width: 90%;">Название товара</th>
+            </tr>
+            </thead>
             <tbody>
             <tr>
-                <td style="width: 10%;" th:text="${iterStat.count}"></td>
+                <td style="width: 10%;" th:text="${prodStat.count}"></td>
                 <td style="width: 90%;" th:text="${product.name}"></td>
             </tr>
             </tbody>
@@ -76,16 +82,24 @@
             Смотреть компоненты
         </button>
 
-        <!-- Таблица компонентов (скрыта по умолчанию через класс collapse) -->
+        <!-- Таблица компонентов -->
         <div th:id="'componentTable' + ${product.id}" class="collapse">
             <div th:each="component, compStat : ${warehouseService.getComponentsByProduct(product)}">
-                <table class="table table-striped table-bordered component-table">
+                <table class="table table-striped table-bordered component-table" th:id="'componentTableRow' + ${component.id}">
+                    <thead>
+                    <tr>
+                        <th style="width: 10%;">#</th>
+                        <th style="width: 60%;">Название</th>
+                        <th style="width: 10%;">Количество</th>
+                        <th style="width: 20%;">Действия</th>
+                    </tr>
+                    </thead>
                     <tbody>
                     <tr>
-                        <td style="width: 10%;" th:text="${compStat.count}"></td>
+                        <td style="width: 10%;" class="component-index" th:text="${compStat.count}"></td>
                         <td style="width: 60%;" th:text="${component.name}"></td>
-                        <td style="width: 30%;"></td>
-                        <td style="width: 10%;">
+                        <td style="width: 10%;" th:text="${warehouseService.calculateComponentQuantity(component)}"></td>
+                        <td style="width: 20%;">
                             <button type="button" class="btn btn-primary btn-sm me-1" th:attr="data-bs-target='#shipmentModal' + ${product.id} + '-' + ${component.id}, data-bs-toggle='modal'">Создать поставку</button>
                             <button type="button" class="btn btn-info btn-sm me-1" th:attr="data-bs-target='#shipmentTable' + ${product.id} + '-' + ${component.id}, data-bs-toggle='collapse'">Смотреть партии</button>
                             <button type="button" class="btn btn-danger btn-sm me-1" th:attr="data-action='deleteComponent', data-id=${component.id}, data-product-id=${product.id}">Удалить</button>
@@ -95,16 +109,25 @@
                     </tbody>
                 </table>
 
-                <!-- Таблица партий (скрыта по умолчанию через класс collapse) -->
+                <!-- Таблица партий -->
                 <table class="table table-striped table-bordered shipment-table collapse" th:id="'shipmentTable' + ${product.id} + '-' + ${component.id}">
+                    <thead>
+                    <tr>
+                        <th style="width: 10%;">#</th>
+                        <th style="width: 30%;">Себестоимость</th>
+                        <th style="width: 30%;">Количество</th>
+                        <th style="width: 20%;">Дата закупки</th>
+                        <th style="width: 10%;">Действия</th>
+                    </tr>
+                    </thead>
                     <tbody>
-                    <tr th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}">
-                        <td style="width: 10%;" th:text="${shipStat.count}"></td>
+                    <tr th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}" th:attr="data-order=${shipStat.count}">
+                        <td style="width: 10%;" class="shipment-index" th:text="${shipStat.count}"></td>
                         <td style="width: 30%;" th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></td>
                         <td style="width: 30%;" th:text="${shipment.quantity}"></td>
                         <td style="width: 20%;" th:text="${#temporals.format(shipment.purchaseDate, 'dd.MM.yyyy')}"></td>
                         <td style="width: 10%;">
-                            <button type="button" class="btn btn-danger btn-sm me-1" th:attr="data-action='deleteShipment', data-id=${shipment.id}, data-component-id=${component.id}">Удалить</button>
+                            <button type="button" class="btn btn-danger btn-sm me-1" th:attr="data-action='deleteShipment', data-id=${shipment.id}, data-component-id=${component.id}, data-product-id=${product.id}">Удалить</button>
                             <button type="button" class="btn btn-warning btn-sm" th:attr="data-bs-target='#editShipmentModal' + ${product.id} + '-' + ${component.id} + '-' + ${shipment.id}, data-bs-toggle='modal'">Редактировать</button>
                         </td>
                     </tr>
@@ -115,7 +138,7 @@
     </div>
 
     <!-- Модальное окно для создания компонента -->
-    <div class="modal fade" id="createComponentModal" tabindex="-1" aria-labelledby="createComponentModalLabel" aria-hidden="true">
+    <div class="modal fade" id="createComponentModal" tabindex="-1" aria-labelledby="createComponentModalLabel">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -123,7 +146,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form th:action="@{/inventory/create-component}" method="post">
+                    <form id="createComponentForm" th:action="@{/inventory/create-component}" method="post">
                         <div class="mb-3">
                             <label for="componentName" class="form-label">Название компонента</label>
                             <input type="text" class="form-control" id="componentName" name="componentName" required>
@@ -142,11 +165,30 @@
         </div>
     </div>
 
+    <!-- Модальное окно для подтверждения удаления -->
+    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmDeleteModalLabel">Подтверждение удаления</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    Вы уверены, что хотите удалить?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Удалить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Модальные окна -->
     <div th:each="product : ${products}">
         <div th:each="component : ${warehouseService.getComponentsByProduct(product)}">
             <!-- Модальное окно для создания поставки -->
-            <div class="modal fade" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="shipmentModalLabel" aria-hidden="true">
+            <div class="modal fade" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="shipmentModalLabel">
                 <div class="modal-dialog">
                     <div class="modal-content">
                         <div class="modal-header">
@@ -154,8 +196,9 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <form th:action="@{/inventory/create-shipment}" method="post">
+                            <form th:action="@{/inventory/create-shipment}" method="post" class="ajax-form">
                                 <input type="hidden" name="componentId" th:value="${component.id}">
+                                <input type="hidden" name="productId" th:value="${product.id}">
                                 <div class="mb-3">
                                     <label for="purchasePrice" class="form-label">Себестоимость (руб.)</label>
                                     <input type="number" class="form-control" id="purchasePrice" name="purchasePrice" step="0.01" required>
@@ -177,7 +220,7 @@
             </div>
 
             <!-- Модальное окно для редактирования компонента -->
-            <div class="modal fade" th:id="'editComponentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="editComponentModalLabel" aria-hidden="true">
+            <div class="modal fade" th:id="'editComponentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="editComponentModalLabel">
                 <div class="modal-dialog">
                     <div class="modal-content">
                         <div class="modal-header">
@@ -185,7 +228,7 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <form th:action="@{/inventory/edit-component}" method="post">
+                            <form th:action="@{/inventory/edit-component}" method="post" class="ajax-form">
                                 <input type="hidden" name="componentId" th:value="${component.id}">
                                 <div class="mb-3">
                                     <label for="editComponentName" class="form-label">Название компонента</label>
@@ -201,7 +244,7 @@
 
             <!-- Модальное окно для редактирования поставки -->
             <div th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}">
-                <div class="modal fade" th:id="'editShipmentModal' + ${product.id} + '-' + ${component.id} + '-' + ${shipment.id}" tabindex="-1" aria-labelledby="editShipmentModalLabel" aria-hidden="true">
+                <div class="modal fade" th:id="'editShipmentModal' + ${product.id} + '-' + ${component.id} + '-' + ${shipment.id}" tabindex="-1" aria-labelledby="editShipmentModalLabel">
                     <div class="modal-dialog">
                         <div class="modal-content">
                             <div class="modal-header">
@@ -209,8 +252,10 @@
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
                             <div class="modal-body">
-                                <form th:action="@{/inventory/edit-shipment}" method="post">
+                                <form th:action="@{/inventory/edit-shipment}" method="post" class="ajax-form">
                                     <input type="hidden" name="shipmentId" th:value="${shipment.id}">
+                                    <input type="hidden" name="componentId" th:value="${component.id}">
+                                    <input type="hidden" name="productId" th:value="${product.id}">
                                     <div class="mb-3">
                                         <label for="editPurchasePrice" class="form-label">Себестоимость (руб.)</label>
                                         <input type="number" class="form-control" id="editPurchasePrice" name="purchasePrice" th:value="${shipment.purchasePrice}" step="0.01" required>
@@ -243,35 +288,1063 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    // Функция для обновления нумерации компонентов
+    function updateComponentIndices(productId) {
+        const componentTables = document.querySelectorAll(`#componentTable${productId} .component-table`);
+        componentTables.forEach((table, index) => {
+            table.querySelector('.component-index').textContent = index + 1;
+        });
+    }
+
+    // Функция для обновления нумерации строк в таблице партий
+    function updateShipmentIndices(shipmentTable) {
+        const rows = Array.from(shipmentTable.querySelectorAll('tbody tr'));
+        rows.sort((a, b) => parseInt(a.getAttribute('data-order')) - parseInt(b.getAttribute('data-order')));
+        rows.forEach((row, index) => {
+            row.querySelector('.shipment-index').textContent = index + 1;
+            row.setAttribute('data-order', index + 1);
+            shipmentTable.querySelector('tbody').appendChild(row);
+        });
+    }
+
+    // Обработка удаления компонента
     document.querySelectorAll('[data-action="deleteComponent"]').forEach(button => {
         button.addEventListener('click', function () {
             const componentId = this.getAttribute('data-id');
             const productId = this.getAttribute('data-product-id');
-            if (confirm('Удалить компонент и все его поставки?')) {
+            const confirmModal = document.getElementById('confirmDeleteModal');
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(confirmModal);
+            modalInstance.show();
+
+            document.getElementById('confirmDeleteBtn').onclick = () => {
                 fetch(`/inventory/delete-component/${componentId}?productId=${productId}`, { method: 'DELETE' })
                     .then(response => {
-                        if (response.ok) location.reload();
-                        else alert('Ошибка при удалении');
+                        if (response.ok) {
+                            const componentTable = document.querySelector(`#componentTableRow${componentId}`);
+                            const shipmentTable = componentTable.nextElementSibling;
+                            componentTable.remove();
+                            shipmentTable?.remove();
+                            updateComponentIndices(productId);
+                        } else {
+                            throw new Error('Ошибка при удалении компонента');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Ошибка удаления компонента:', error);
+                        alert('Ошибка при удалении компонента');
+                    })
+                    .finally(() => {
+                        modalInstance.hide();
                     });
-            }
+            };
         });
     });
 
+    // Обработка удаления поставки
     document.querySelectorAll('[data-action="deleteShipment"]').forEach(button => {
         button.addEventListener('click', function () {
             const shipmentId = this.getAttribute('data-id');
             const componentId = this.getAttribute('data-component-id');
-            if (confirm('Удалить поставку?')) {
+            const productId = this.getAttribute('data-product-id');
+            const confirmModal = document.getElementById('confirmDeleteModal');
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(confirmModal);
+            modalInstance.show();
+
+            document.getElementById('confirmDeleteBtn').onclick = () => {
                 fetch(`/inventory/delete-shipment/${shipmentId}?componentId=${componentId}`, { method: 'DELETE' })
                     .then(response => {
-                        if (response.ok) location.reload();
-                        else alert('Ошибка при удалении');
+                        if (response.ok) {
+                            const shipmentTable = document.querySelector(`#shipmentTable${productId}-${componentId}`);
+                            this.closest('tr').remove();
+                            updateShipmentIndices(shipmentTable);
+                            return fetch(`/inventory/component-quantity/${componentId}`);
+                        } else {
+                            throw new Error('Ошибка при удалении поставки');
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        const quantityCell = document.querySelector(`[data-id="${componentId}"]`).closest('tr').children[2];
+                        quantityCell.textContent = data.quantity;
+                    })
+                    .catch(error => {
+                        console.error('Ошибка удаления поставки:', error);
+                        alert('Ошибка при удалении поставки');
+                    })
+                    .finally(() => {
+                        modalInstance.hide();
                     });
+            };
+        });
+    });
+
+    // Обработка форм через AJAX
+    document.querySelectorAll('.ajax-form').forEach(form => {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const action = this.getAttribute('action');
+            const modalElement = this.closest('.modal');
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+
+            fetch(action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Ошибка при сохранении');
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    if (action.includes('create-shipment') || action.includes('edit-shipment')) {
+                        const componentId = formData.get('componentId');
+                        const productId = formData.get('productId');
+                        fetch(`/inventory/shipments/${componentId}?productId=${productId}`)
+                            .then(response => response.text())
+                            .then(html => {
+                                const shipmentTable = document.querySelector(`#shipmentTable${productId}-${componentId}`);
+                                shipmentTable.innerHTML = html;
+                                updateShipmentIndices(shipmentTable);
+                                return fetch(`/inventory/component-quantity/${componentId}`);
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                const quantityCell = document.querySelector(`[data-id="${componentId}"]`).closest('tr').children[2];
+                                quantityCell.textContent = data.quantity;
+                            });
+                    } else if (action.includes('edit-component')) {
+                        const componentId = formData.get('componentId');
+                        const newName = formData.get('componentName');
+                        const nameCell = document.querySelector(`button[data-id="${componentId}"]`).closest('tr').children[1];
+                        nameCell.textContent = newName;
+                    }
+                    modalInstance.hide();
+                } else {
+                    throw new Error('Ошибка при сохранении');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка обработки формы:', error);
+                alert('Ошибка при сохранении данных');
+            });
+        });
+    });
+
+    // Обработка создания компонента через AJAX
+    document.getElementById('createComponentForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch(this.getAttribute('action'), {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Ошибка при создании компонента');
             }
+        })
+        .catch(error => {
+            console.error('Ошибка создания компонента:', error);
+            alert('Ошибка при создании компонента');
         });
     });
 </script>
 </body>
 </html>
 
+<!--<!DOCTYPE html>-->
+<!--<html xmlns:th="http://www.thymeleaf.org">-->
+<!--<head>-->
+<!--    <title>Склад</title>-->
+<!--    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">-->
+<!--    <style>-->
+<!--        .table-bordered th, .table-bordered td {-->
+<!--            border: 1px solid #dee2e6;-->
+<!--        }-->
+<!--        .table thead th {-->
+<!--            border-bottom: 2px solid #dee2e6;-->
+<!--            vertical-align: middle;-->
+<!--        }-->
+<!--        .modal-dialog {-->
+<!--            max-width: 400px;-->
+<!--        }-->
+<!--        .product-table {-->
+<!--            width: 80%;-->
+<!--            margin-bottom: 20px;-->
+<!--        }-->
+<!--        .component-table {-->
+<!--            width: 60%;-->
+<!--            margin-left: 20%;-->
+<!--            font-size: 12px;-->
+<!--            line-height: 1.2;-->
+<!--        }-->
+<!--        .shipment-table {-->
+<!--            font-size: 12px;-->
+<!--            line-height: 1.2;-->
+<!--            margin-left: 25%;-->
+<!--            width: 55%;-->
+<!--        }-->
+<!--        .footer {-->
+<!--            margin-top: 50px;-->
+<!--            padding: 20px 0;-->
+<!--            background-color: rgba(233, 236, 239, 0.9);-->
+<!--            text-align: center;-->
+<!--            border: 1px solid #ced4da;-->
+<!--            font-size: 13px;-->
+<!--        }-->
+<!--    </style>-->
+<!--</head>-->
+<!--<body>-->
+<!--<div class="container mt-3">-->
+<!--    <div class="d-flex justify-content-between align-items-center mb-4">-->
+<!--        <h4>Складской учет</h4>-->
+<!--        <div>-->
+<!--            <span class="me-3">Привет, <span th:text="${#authentication.name} ?: 'Гость'"></span></span>-->
+<!--            <a href="/dashboard" class="btn btn-info">Вернуться в главное меню</a>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    <h2>Склад</h2>-->
+
+<!--    &lt;!&ndash; Кнопка для создания компонента &ndash;&gt;-->
+<!--    <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#createComponentModal">-->
+<!--        Создать компонент-->
+<!--    </button>-->
+
+<!--    &lt;!&ndash; Таблицы для каждого товара &ndash;&gt;-->
+<!--    <div th:each="product, prodStat : ${products}">-->
+<!--        <table class="table table-striped table-bordered product-table">-->
+<!--            <thead>-->
+<!--            <tr>-->
+<!--                <th style="width: 10%;">#</th>-->
+<!--                <th style="width: 90%;">Название товара</th>-->
+<!--            </tr>-->
+<!--            </thead>-->
+<!--            <tbody>-->
+<!--            <tr>-->
+<!--                <td style="width: 10%;" th:text="${prodStat.count}"></td>-->
+<!--                <td style="width: 90%;" th:text="${product.name}"></td>-->
+<!--            </tr>-->
+<!--            </tbody>-->
+<!--        </table>-->
+
+<!--        &lt;!&ndash; Кнопка для показа компонентов &ndash;&gt;-->
+<!--        <button type="button"-->
+<!--                class="btn btn-secondary btn-sm mb-2"-->
+<!--                th:attr="data-bs-toggle='collapse'"-->
+<!--                th:data-bs-target="'#componentTable' + ${product.id}">-->
+<!--            Смотреть компоненты-->
+<!--        </button>-->
+
+<!--        &lt;!&ndash; Таблица компонентов &ndash;&gt;-->
+<!--        <div th:id="'componentTable' + ${product.id}" class="collapse">-->
+<!--            <div th:each="component, compStat : ${warehouseService.getComponentsByProduct(product)}">-->
+<!--                <table class="table table-striped table-bordered component-table" th:id="'componentTableRow' + ${component.id}">-->
+<!--                    <thead>-->
+<!--                    <tr>-->
+<!--                        <th style="width: 10%;">#</th>-->
+<!--                        <th style="width: 60%;">Название</th>-->
+<!--                        <th style="width: 10%;">Количество</th>-->
+<!--                        <th style="width: 20%;">Действия</th>-->
+<!--                    </tr>-->
+<!--                    </thead>-->
+<!--                    <tbody>-->
+<!--                    <tr>-->
+<!--                        <td style="width: 10%;" class="component-index" th:text="${compStat.count}"></td>-->
+<!--                        <td style="width: 60%;" th:text="${component.name}"></td>-->
+<!--                        <td style="width: 10%;" th:text="${warehouseService.calculateComponentQuantity(component)}"></td>-->
+<!--                        <td style="width: 20%;">-->
+<!--                            <button type="button" class="btn btn-primary btn-sm me-1" th:attr="data-bs-target='#shipmentModal' + ${product.id} + '-' + ${component.id}, data-bs-toggle='modal'">Создать поставку</button>-->
+<!--                            <button type="button" class="btn btn-info btn-sm me-1" th:attr="data-bs-target='#shipmentTable' + ${product.id} + '-' + ${component.id}, data-bs-toggle='collapse'">Смотреть партии</button>-->
+<!--                            <button type="button" class="btn btn-danger btn-sm me-1" th:attr="data-action='deleteComponent', data-id=${component.id}, data-product-id=${product.id}">Удалить</button>-->
+<!--                            <button type="button" class="btn btn-warning btn-sm" th:attr="data-bs-target='#editComponentModal' + ${product.id} + '-' + ${component.id}, data-bs-toggle='modal'">Редактировать</button>-->
+<!--                        </td>-->
+<!--                    </tr>-->
+<!--                    </tbody>-->
+<!--                </table>-->
+
+<!--                &lt;!&ndash; Таблица партий &ndash;&gt;-->
+<!--                <table class="table table-striped table-bordered shipment-table collapse" th:id="'shipmentTable' + ${product.id} + '-' + ${component.id}">-->
+<!--                    <thead>-->
+<!--                    <tr>-->
+<!--                        <th style="width: 10%;">#</th>-->
+<!--                        <th style="width: 30%;">Себестоимость</th>-->
+<!--                        <th style="width: 30%;">Количество</th>-->
+<!--                        <th style="width: 20%;">Дата закупки</th>-->
+<!--                        <th style="width: 10%;">Действия</th>-->
+<!--                    </tr>-->
+<!--                    </thead>-->
+<!--                    <tbody>-->
+<!--                    <tr th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}">-->
+<!--                        <td style="width: 10%;" class="shipment-index" th:text="${shipStat.count}"></td>-->
+<!--                        <td style="width: 30%;" th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></td>-->
+<!--                        <td style="width: 30%;" th:text="${shipment.quantity}"></td>-->
+<!--                        <td style="width: 20%;" th:text="${#temporals.format(shipment.purchaseDate, 'dd.MM.yyyy')}"></td>-->
+<!--                        <td style="width: 10%;">-->
+<!--                            <button type="button" class="btn btn-danger btn-sm me-1" th:attr="data-action='deleteShipment', data-id=${shipment.id}, data-component-id=${component.id}, data-product-id=${product.id}">Удалить</button>-->
+<!--                            <button type="button" class="btn btn-warning btn-sm" th:attr="data-bs-target='#editShipmentModal' + ${product.id} + '-' + ${component.id} + '-' + ${shipment.id}, data-bs-toggle='modal'">Редактировать</button>-->
+<!--                        </td>-->
+<!--                    </tr>-->
+<!--                    </tbody>-->
+<!--                </table>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Модальное окно для создания компонента &ndash;&gt;-->
+<!--    <div class="modal fade" id="createComponentModal" tabindex="-1" aria-labelledby="createComponentModalLabel" aria-hidden="true">-->
+<!--        <div class="modal-dialog">-->
+<!--            <div class="modal-content">-->
+<!--                <div class="modal-header">-->
+<!--                    <h5 class="modal-title" id="createComponentModalLabel">Создать компонент</h5>-->
+<!--                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                </div>-->
+<!--                <div class="modal-body">-->
+<!--                    <form id="createComponentForm" th:action="@{/inventory/create-component}" method="post">-->
+<!--                        <div class="mb-3">-->
+<!--                            <label for="componentName" class="form-label">Название компонента</label>-->
+<!--                            <input type="text" class="form-control" id="componentName" name="componentName" required>-->
+<!--                        </div>-->
+<!--                        <div class="mb-3">-->
+<!--                            <label for="productId" class="form-label">Товар</label>-->
+<!--                            <select class="form-control" id="productId" name="productId" required>-->
+<!--                                <option th:each="product : ${products}" th:value="${product.id}" th:text="${product.name}"></option>-->
+<!--                            </select>-->
+<!--                        </div>-->
+<!--                        <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                    </form>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Модальное окно для подтверждения удаления &ndash;&gt;-->
+<!--    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">-->
+<!--        <div class="modal-dialog">-->
+<!--            <div class="modal-content">-->
+<!--                <div class="modal-header">-->
+<!--                    <h5 class="modal-title" id="confirmDeleteModalLabel">Подтверждение удаления</h5>-->
+<!--                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                </div>-->
+<!--                <div class="modal-body">-->
+<!--                    Вы уверены, что хотите удалить?-->
+<!--                </div>-->
+<!--                <div class="modal-footer">-->
+<!--                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Удалить</button>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Модальные окна &ndash;&gt;-->
+<!--    <div th:each="product : ${products}">-->
+<!--        <div th:each="component : ${warehouseService.getComponentsByProduct(product)}">-->
+<!--            &lt;!&ndash; Модальное окно для создания поставки &ndash;&gt;-->
+<!--            <div class="modal fade" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="shipmentModalLabel" aria-hidden="true">-->
+<!--                <div class="modal-dialog">-->
+<!--                    <div class="modal-content">-->
+<!--                        <div class="modal-header">-->
+<!--                            <h5 class="modal-title">Создать поставку для <span th:text="${component.name}"></span></h5>-->
+<!--                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                        </div>-->
+<!--                        <div class="modal-body">-->
+<!--                            <form th:action="@{/inventory/create-shipment}" method="post" class="ajax-form">-->
+<!--                                <input type="hidden" name="componentId" th:value="${component.id}">-->
+<!--                                <input type="hidden" name="productId" th:value="${product.id}">-->
+<!--                                <div class="mb-3">-->
+<!--                                    <label for="purchasePrice" class="form-label">Себестоимость (руб.)</label>-->
+<!--                                    <input type="number" class="form-control" id="purchasePrice" name="purchasePrice" step="0.01" required>-->
+<!--                                </div>-->
+<!--                                <div class="mb-3">-->
+<!--                                    <label for="quantity" class="form-label">Количество</label>-->
+<!--                                    <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>-->
+<!--                                </div>-->
+<!--                                <div class="mb-3">-->
+<!--                                    <label for="purchaseDate" class="form-label">Дата закупки</label>-->
+<!--                                    <input type="date" class="form-control" id="purchaseDate" name="purchaseDate" required>-->
+<!--                                </div>-->
+<!--                                <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                            </form>-->
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+
+<!--            &lt;!&ndash; Модальное окно для редактирования компонента &ndash;&gt;-->
+<!--            <div class="modal fade" th:id="'editComponentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="editComponentModalLabel" aria-hidden="true">-->
+<!--                <div class="modal-dialog">-->
+<!--                    <div class="modal-content">-->
+<!--                        <div class="modal-header">-->
+<!--                            <h5 class="modal-title" id="editComponentModalLabel">Редактировать компонент</h5>-->
+<!--                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                        </div>-->
+<!--                        <div class="modal-body">-->
+<!--                            <form th:action="@{/inventory/edit-component}" method="post" class="ajax-form">-->
+<!--                                <input type="hidden" name="componentId" th:value="${component.id}">-->
+<!--                                <div class="mb-3">-->
+<!--                                    <label for="editComponentName" class="form-label">Название компонента</label>-->
+<!--                                    <input type="text" class="form-control" id="editComponentName" name="componentName" th:value="${component.name}" required>-->
+<!--                                </div>-->
+<!--                                <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                            </form>-->
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+
+<!--            &lt;!&ndash; Модальное окно для редактирования поставки &ndash;&gt;-->
+<!--            <div th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}">-->
+<!--                <div class="modal fade" th:id="'editShipmentModal' + ${product.id} + '-' + ${component.id} + '-' + ${shipment.id}" tabindex="-1" aria-labelledby="editShipmentModalLabel" aria-hidden="true">-->
+<!--                    <div class="modal-dialog">-->
+<!--                        <div class="modal-content">-->
+<!--                            <div class="modal-header">-->
+<!--                                <h5 class="modal-title" id="editShipmentModalLabel">Редактировать поставку</h5>-->
+<!--                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                            </div>-->
+<!--                            <div class="modal-body">-->
+<!--                                <form th:action="@{/inventory/edit-shipment}" method="post" class="ajax-form">-->
+<!--                                    <input type="hidden" name="shipmentId" th:value="${shipment.id}">-->
+<!--                                    <input type="hidden" name="componentId" th:value="${component.id}">-->
+<!--                                    <input type="hidden" name="productId" th:value="${product.id}">-->
+<!--                                    <div class="mb-3">-->
+<!--                                        <label for="editPurchasePrice" class="form-label">Себестоимость (руб.)</label>-->
+<!--                                        <input type="number" class="form-control" id="editPurchasePrice" name="purchasePrice" th:value="${shipment.purchasePrice}" step="0.01" required>-->
+<!--                                    </div>-->
+<!--                                    <div class="mb-3">-->
+<!--                                        <label for="editQuantity" class="form-label">Количество</label>-->
+<!--                                        <input type="number" class="form-control" id="editQuantity" name="quantity" th:value="${shipment.quantity}" min="1" required>-->
+<!--                                    </div>-->
+<!--                                    <div class="mb-3">-->
+<!--                                        <label for="editPurchaseDate" class="form-label">Дата закупки</label>-->
+<!--                                        <input type="date" class="form-control" id="editPurchaseDate" name="purchaseDate" th:value="${#temporals.format(shipment.purchaseDate, 'yyyy-MM-dd')}" required>-->
+<!--                                    </div>-->
+<!--                                    <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                                </form>-->
+<!--                            </div>-->
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+<!--</div>-->
+
+<!--&lt;!&ndash; Полоса с информацией внизу &ndash;&gt;-->
+<!--<div class="footer">-->
+<!--    <p>Система складского учёта помогает управлять товарами, отслеживать запасы и анализировать финансовые показатели. Удобный интерфейс и интеграция с Ozon упрощают работу с ассортиментом.</p>-->
+<!--    <p>Свяжитесь с нами: <a href="mailto:artemsmirnovsmirnov@gmail.com">artemsmirnovsmirnov@gmail.com</a></p>-->
+<!--</div>-->
+
+<!--<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>-->
+<!--<script>-->
+<!--    // Функция для обновления нумерации компонентов-->
+<!--    function updateComponentIndices(productId) {-->
+<!--        const componentTables = document.querySelectorAll(`#componentTable${productId} .component-table`);-->
+<!--        componentTables.forEach((table, index) => {-->
+<!--            table.querySelector('.component-index').textContent = index + 1;-->
+<!--        });-->
+<!--    }-->
+
+<!--    // Функция для обновления нумерации строк в таблице партий-->
+<!--    function updateShipmentIndices(shipmentTable) {-->
+<!--        const rows = shipmentTable.querySelectorAll('tbody tr');-->
+<!--        rows.forEach((row, index) => {-->
+<!--            row.querySelector('.shipment-index').textContent = index + 1;-->
+<!--        });-->
+<!--    }-->
+
+<!--    // Обработка удаления компонента-->
+<!--    document.querySelectorAll('[data-action="deleteComponent"]').forEach(button => {-->
+<!--        button.addEventListener('click', function () {-->
+<!--            const componentId = this.getAttribute('data-id');-->
+<!--            const productId = this.getAttribute('data-product-id');-->
+<!--            const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));-->
+<!--            modal.show();-->
+<!--            document.getElementById('confirmDeleteBtn').onclick = () => {-->
+<!--                fetch(`/inventory/delete-component/${componentId}?productId=${productId}`, { method: 'DELETE' })-->
+<!--                    .then(response => {-->
+<!--                        if (response.ok) {-->
+<!--                            const componentTable = document.querySelector(`#componentTableRow${componentId}`);-->
+<!--                            const shipmentTable = componentTable.nextElementSibling;-->
+<!--                            componentTable.remove();-->
+<!--                            shipmentTable?.remove();-->
+<!--                            updateComponentIndices(productId);-->
+<!--                        } else {-->
+<!--                            throw new Error('Ошибка при удалении');-->
+<!--                        }-->
+<!--                    })-->
+<!--                    .catch(error => {-->
+<!--                        console.error('Ошибка удаления компонента:', error);-->
+<!--                        alert('Ошибка при удалении компонента');-->
+<!--                    })-->
+<!--                    .finally(() => {-->
+<!--                        modal.hide();-->
+<!--                    });-->
+<!--            };-->
+<!--        });-->
+<!--    });-->
+
+<!--    // Обработка удаления поставки-->
+<!--    document.querySelectorAll('[data-action="deleteShipment"]').forEach(button => {-->
+<!--        button.addEventListener('click', function () {-->
+<!--            const shipmentId = this.getAttribute('data-id');-->
+<!--            const componentId = this.getAttribute('data-component-id');-->
+<!--            const productId = this.getAttribute('data-product-id');-->
+<!--            const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));-->
+<!--            modal.show();-->
+<!--            document.getElementById('confirmDeleteBtn').onclick = () => {-->
+<!--                fetch(`/inventory/delete-shipment/${shipmentId}?componentId=${componentId}`, { method: 'DELETE' })-->
+<!--                    .then(response => {-->
+<!--                        if (response.ok) {-->
+<!--                            const shipmentTable = document.querySelector(`#shipmentTable${productId}-${componentId}`);-->
+<!--                            this.closest('tr').remove();-->
+<!--                            updateShipmentIndices(shipmentTable);-->
+<!--                            return fetch(`/inventory/component-quantity/${componentId}`);-->
+<!--                        } else {-->
+<!--                            throw new Error('Ошибка при удалении');-->
+<!--                        }-->
+<!--                    })-->
+<!--                    .then(response => response.json())-->
+<!--                    .then(data => {-->
+<!--                        const quantityCell = document.querySelector(`[data-id="${componentId}"]`).closest('tr').children[2];-->
+<!--                        quantityCell.textContent = data.quantity;-->
+<!--                    })-->
+<!--                    .catch(error => {-->
+<!--                        console.error('Ошибка удаления поставки:', error);-->
+<!--                        alert('Ошибка при удалении поставки');-->
+<!--                    })-->
+<!--                    .finally(() => {-->
+<!--                        modal.hide();-->
+<!--                    });-->
+<!--            };-->
+<!--        });-->
+<!--    });-->
+
+<!--    // Обработка форм через AJAX-->
+<!--    document.querySelectorAll('.ajax-form').forEach(form => {-->
+<!--        form.addEventListener('submit', function (e) {-->
+<!--            e.preventDefault();-->
+<!--            const formData = new FormData(this);-->
+<!--            const action = this.getAttribute('action');-->
+<!--            const modal = bootstrap.Modal.getInstance(this.closest('.modal'));-->
+<!--            fetch(action, {-->
+<!--                method: 'POST',-->
+<!--                body: formData-->
+<!--            })-->
+<!--            .then(response => {-->
+<!--                if (!response.ok) throw new Error('Ошибка при сохранении');-->
+<!--                return response.json();-->
+<!--            })-->
+<!--            .then(data => {-->
+<!--                if (data.success) {-->
+<!--                    if (action.includes('create-shipment') || action.includes('edit-shipment')) {-->
+<!--                        const componentId = formData.get('componentId');-->
+<!--                        const productId = formData.get('productId');-->
+<!--                        fetch(`/inventory/shipments/${componentId}?productId=${productId}`)-->
+<!--                            .then(response => response.text())-->
+<!--                            .then(html => {-->
+<!--                                const shipmentTable = document.querySelector(`#shipmentTable${productId}-${componentId}`);-->
+<!--                                shipmentTable.innerHTML = html;-->
+<!--                                updateShipmentIndices(shipmentTable);-->
+<!--                                return fetch(`/inventory/component-quantity/${componentId}`);-->
+<!--                            })-->
+<!--                            .then(response => response.json())-->
+<!--                            .then(data => {-->
+<!--                                const quantityCell = document.querySelector(`[data-id="${componentId}"]`).closest('tr').children[2];-->
+<!--                                quantityCell.textContent = data.quantity;-->
+<!--                            });-->
+<!--                    } else if (action.includes('edit-component')) {-->
+<!--                        const componentId = formData.get('componentId');-->
+<!--                        const newName = formData.get('componentName');-->
+<!--                        const nameCell = document.querySelector(`button[data-id="${componentId}"]`).closest('tr').children[1];-->
+<!--                        nameCell.textContent = newName;-->
+<!--                    }-->
+<!--                    modal.hide();-->
+<!--                } else {-->
+<!--                    throw new Error('Ошибка при сохранении');-->
+<!--                }-->
+<!--            })-->
+<!--            .catch(error => {-->
+<!--                console.error('Ошибка обработки формы:', error);-->
+<!--                alert('Ошибка при сохранении данных');-->
+<!--            });-->
+<!--        });-->
+<!--    });-->
+
+<!--    // Обработка создания компонента через AJAX-->
+<!--    document.getElementById('createComponentForm').addEventListener('submit', function (e) {-->
+<!--        e.preventDefault();-->
+<!--        const formData = new FormData(this);-->
+<!--        fetch(this.getAttribute('action'), {-->
+<!--            method: 'POST',-->
+<!--            body: formData-->
+<!--        })-->
+<!--        .then(response => response.json())-->
+<!--        .then(data => {-->
+<!--            if (data.success) {-->
+<!--                location.reload(); // Перезагрузка для добавления нового компонента-->
+<!--            } else {-->
+<!--                alert('Ошибка при создании компонента');-->
+<!--            }-->
+<!--        })-->
+<!--        .catch(error => {-->
+<!--            console.error('Ошибка создания компонента:', error);-->
+<!--            alert('Ошибка при создании компонента');-->
+<!--        });-->
+<!--    });-->
+<!--</script>-->
+<!--</body>-->
+<!--</html>-->
+
+
+
+
+<!--<!DOCTYPE html>-->
+<!--<html xmlns:th="http://www.thymeleaf.org">-->
+<!--<head>-->
+<!--    <title>Склад</title>-->
+<!--    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">-->
+<!--    <style>-->
+<!--        .table-bordered th, .table-bordered td {-->
+<!--            border: 1px solid #dee2e6;-->
+<!--        }-->
+<!--        .table thead th {-->
+<!--            border-bottom: 2px solid #dee2e6;-->
+<!--            vertical-align: middle;-->
+<!--        }-->
+<!--        .modal-dialog {-->
+<!--            max-width: 400px;-->
+<!--        }-->
+<!--        .product-table {-->
+<!--            width: 80%;-->
+<!--            margin-bottom: 20px;-->
+<!--        }-->
+<!--        .component-table {-->
+<!--            width: 60%;-->
+<!--            margin-left: 20%;-->
+<!--            font-size: 12px;-->
+<!--            line-height: 1.2;-->
+<!--        }-->
+<!--        .shipment-table {-->
+<!--            font-size: 12px;-->
+<!--            line-height: 1.2;-->
+<!--            margin-left: 25%;-->
+<!--            width: 55%;-->
+<!--        }-->
+<!--        .footer {-->
+<!--            margin-top: 50px;-->
+<!--            padding: 20px 0;-->
+<!--            background-color: rgba(233, 236, 239, 0.9);-->
+<!--            text-align: center;-->
+<!--            border: 1px solid #ced4da;-->
+<!--            font-size: 13px;-->
+<!--        }-->
+<!--    </style>-->
+<!--</head>-->
+<!--<body>-->
+<!--<div class="container mt-3">-->
+<!--    <div class="d-flex justify-content-between align-items-center mb-4">-->
+<!--        <h4>Складской учет</h4>-->
+<!--        <div>-->
+<!--            <span class="me-3">Привет, <span th:text="${#authentication.name} ?: 'Гость'"></span></span>-->
+<!--            <a href="/dashboard" class="btn btn-info">Вернуться в главное меню</a>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    <h2>Склад</h2>-->
+
+<!--    &lt;!&ndash; Кнопка для создания компонента &ndash;&gt;-->
+<!--    <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#createComponentModal">-->
+<!--        Создать компонент-->
+<!--    </button>-->
+
+<!--    &lt;!&ndash; Таблицы для каждого товара &ndash;&gt;-->
+<!--    <div th:each="product, iterStat : ${products}">-->
+<!--        <table class="table table-striped table-bordered product-table">-->
+<!--            <thead>-->
+<!--            <tr>-->
+<!--                <th style="width: 10%;">#</th>-->
+<!--                <th style="width: 90%;">Название товара</th>-->
+<!--            </tr>-->
+<!--            </thead>-->
+<!--            <tbody>-->
+<!--            <tr>-->
+<!--                <td style="width: 10%;" th:text="${iterStat.count}"></td>-->
+<!--                <td style="width: 90%;" th:text="${product.name}"></td>-->
+<!--            </tr>-->
+<!--            </tbody>-->
+<!--        </table>-->
+
+<!--        &lt;!&ndash; Кнопка для показа компонентов &ndash;&gt;-->
+<!--        <button type="button"-->
+<!--                class="btn btn-secondary btn-sm mb-2"-->
+<!--                th:attr="data-bs-toggle='collapse'"-->
+<!--                th:data-bs-target="'#componentTable' + ${product.id}">-->
+<!--            Смотреть компоненты-->
+<!--        </button>-->
+
+<!--        &lt;!&ndash; Таблица компонентов &ndash;&gt;-->
+<!--        <div th:id="'componentTable' + ${product.id}" class="collapse">-->
+<!--            <div th:each="component, compStat : ${warehouseService.getComponentsByProduct(product)}">-->
+<!--                <table class="table table-striped table-bordered component-table">-->
+<!--                    <thead>-->
+<!--                    <tr>-->
+<!--                        <th style="width: 10%;">#</th>-->
+<!--                        <th style="width: 60%;">Название</th>-->
+<!--                        <th style="width: 10%;">Количество</th>-->
+<!--                        <th style="width: 20%;">Действия</th>-->
+<!--                    </tr>-->
+<!--                    </thead>-->
+<!--                    <tbody>-->
+<!--                    <tr>-->
+<!--                        <td style="width: 10%;" th:text="${compStat.count}"></td>-->
+<!--                        <td style="width: 60%;" th:text="${component.name}"></td>-->
+<!--                        <td style="width: 10%;" th:text="${warehouseService.calculateComponentQuantity(component)}"></td>-->
+<!--                        <td style="width: 20%;">-->
+<!--                            <button type="button" class="btn btn-primary btn-sm me-1" th:attr="data-bs-target='#shipmentModal' + ${product.id} + '-' + ${component.id}, data-bs-toggle='modal'">Создать поставку</button>-->
+<!--                            <button type="button" class="btn btn-info btn-sm me-1" th:attr="data-bs-target='#shipmentTable' + ${product.id} + '-' + ${component.id}, data-bs-toggle='collapse'">Смотреть партии</button>-->
+<!--                            <button type="button" class="btn btn-danger btn-sm me-1" th:attr="data-action='deleteComponent', data-id=${component.id}, data-product-id=${product.id}">Удалить</button>-->
+<!--                            <button type="button" class="btn btn-warning btn-sm" th:attr="data-bs-target='#editComponentModal' + ${product.id} + '-' + ${component.id}, data-bs-toggle='modal'">Редактировать</button>-->
+<!--                        </td>-->
+<!--                    </tr>-->
+<!--                    </tbody>-->
+<!--                </table>-->
+
+<!--                &lt;!&ndash; Таблица партий &ndash;&gt;-->
+<!--                <table class="table table-striped table-bordered shipment-table collapse" th:id="'shipmentTable' + ${product.id} + '-' + ${component.id}">-->
+<!--                    <thead>-->
+<!--                    <tr>-->
+<!--                        <th style="width: 10%;">#</th>-->
+<!--                        <th style="width: 30%;">Себестоимость</th>-->
+<!--                        <th style="width: 30%;">Количество</th>-->
+<!--                        <th style="width: 20%;">Дата закупки</th>-->
+<!--                        <th style="width: 10%;">Действия</th>-->
+<!--                    </tr>-->
+<!--                    </thead>-->
+<!--                    <tbody>-->
+<!--                    <tr th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}">-->
+<!--                        <td style="width: 10%;" class="shipment-index" th:text="${shipStat.count}"></td>-->
+<!--                        <td style="width: 30%;" th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></td>-->
+<!--                        <td style="width: 30%;" th:text="${shipment.quantity}"></td>-->
+<!--                        <td style="width: 20%;" th:text="${#temporals.format(shipment.purchaseDate, 'dd.MM.yyyy')}"></td>-->
+<!--                        <td style="width: 10%;">-->
+<!--                            <button type="button" class="btn btn-danger btn-sm me-1" th:attr="data-action='deleteShipment', data-id=${shipment.id}, data-component-id=${component.id}, data-product-id=${product.id}">Удалить</button>-->
+<!--                            <button type="button" class="btn btn-warning btn-sm" th:attr="data-bs-target='#editShipmentModal' + ${product.id} + '-' + ${component.id} + '-' + ${shipment.id}, data-bs-toggle='modal'">Редактировать</button>-->
+<!--                        </td>-->
+<!--                    </tr>-->
+<!--                    </tbody>-->
+<!--                </table>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Модальное окно для создания компонента &ndash;&gt;-->
+<!--    <div class="modal fade" id="createComponentModal" tabindex="-1" aria-labelledby="createComponentModalLabel" aria-hidden="true">-->
+<!--        <div class="modal-dialog">-->
+<!--            <div class="modal-content">-->
+<!--                <div class="modal-header">-->
+<!--                    <h5 class="modal-title" id="createComponentModalLabel">Создать компонент</h5>-->
+<!--                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                </div>-->
+<!--                <div class="modal-body">-->
+<!--                    <form id="createComponentForm" th:action="@{/inventory/create-component}" method="post">-->
+<!--                        <div class="mb-3">-->
+<!--                            <label for="componentName" class="form-label">Название компонента</label>-->
+<!--                            <input type="text" class="form-control" id="componentName" name="componentName" required>-->
+<!--                        </div>-->
+<!--                        <div class="mb-3">-->
+<!--                            <label for="productId" class="form-label">Товар</label>-->
+<!--                            <select class="form-control" id="productId" name="productId" required>-->
+<!--                                <option th:each="product : ${products}" th:value="${product.id}" th:text="${product.name}"></option>-->
+<!--                            </select>-->
+<!--                        </div>-->
+<!--                        <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                    </form>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Модальное окно для подтверждения удаления &ndash;&gt;-->
+<!--    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">-->
+<!--        <div class="modal-dialog">-->
+<!--            <div class="modal-content">-->
+<!--                <div class="modal-header">-->
+<!--                    <h5 class="modal-title" id="confirmDeleteModalLabel">Подтверждение удаления</h5>-->
+<!--                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                </div>-->
+<!--                <div class="modal-body">-->
+<!--                    Вы уверены, что хотите удалить?-->
+<!--                </div>-->
+<!--                <div class="modal-footer">-->
+<!--                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Удалить</button>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Модальные окна &ndash;&gt;-->
+<!--    <div th:each="product : ${products}">-->
+<!--        <div th:each="component : ${warehouseService.getComponentsByProduct(product)}">-->
+<!--            &lt;!&ndash; Модальное окно для создания поставки &ndash;&gt;-->
+<!--            <div class="modal fade" th:id="'shipmentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="shipmentModalLabel" aria-hidden="true">-->
+<!--                <div class="modal-dialog">-->
+<!--                    <div class="modal-content">-->
+<!--                        <div class="modal-header">-->
+<!--                            <h5 class="modal-title">Создать поставку для <span th:text="${component.name}"></span></h5>-->
+<!--                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                        </div>-->
+<!--                        <div class="modal-body">-->
+<!--                            <form th:action="@{/inventory/create-shipment}" method="post" class="ajax-form">-->
+<!--                                <input type="hidden" name="componentId" th:value="${component.id}">-->
+<!--                                <input type="hidden" name="productId" th:value="${product.id}">-->
+<!--                                <div class="mb-3">-->
+<!--                                    <label for="purchasePrice" class="form-label">Себестоимость (руб.)</label>-->
+<!--                                    <input type="number" class="form-control" id="purchasePrice" name="purchasePrice" step="0.01" required>-->
+<!--                                </div>-->
+<!--                                <div class="mb-3">-->
+<!--                                    <label for="quantity" class="form-label">Количество</label>-->
+<!--                                    <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>-->
+<!--                                </div>-->
+<!--                                <div class="mb-3">-->
+<!--                                    <label for="purchaseDate" class="form-label">Дата закупки</label>-->
+<!--                                    <input type="date" class="form-control" id="purchaseDate" name="purchaseDate" required>-->
+<!--                                </div>-->
+<!--                                <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                            </form>-->
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+
+<!--            &lt;!&ndash; Модальное окно для редактирования компонента &ndash;&gt;-->
+<!--            <div class="modal fade" th:id="'editComponentModal' + ${product.id} + '-' + ${component.id}" tabindex="-1" aria-labelledby="editComponentModalLabel" aria-hidden="true">-->
+<!--                <div class="modal-dialog">-->
+<!--                    <div class="modal-content">-->
+<!--                        <div class="modal-header">-->
+<!--                            <h5 class="modal-title" id="editComponentModalLabel">Редактировать компонент</h5>-->
+<!--                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                        </div>-->
+<!--                        <div class="modal-body">-->
+<!--                            <form th:action="@{/inventory/edit-component}" method="post" class="ajax-form">-->
+<!--                                <input type="hidden" name="componentId" th:value="${component.id}">-->
+<!--                                <div class="mb-3">-->
+<!--                                    <label for="editComponentName" class="form-label">Название компонента</label>-->
+<!--                                    <input type="text" class="form-control" id="editComponentName" name="componentName" th:value="${component.name}" required>-->
+<!--                                </div>-->
+<!--                                <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                            </form>-->
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+
+<!--            &lt;!&ndash; Модальное окно для редактирования поставки &ndash;&gt;-->
+<!--            <div th:each="shipment, shipStat : ${warehouseService.getShipmentsByComponent(component)}">-->
+<!--                <div class="modal fade" th:id="'editShipmentModal' + ${product.id} + '-' + ${component.id} + '-' + ${shipment.id}" tabindex="-1" aria-labelledby="editShipmentModalLabel" aria-hidden="true">-->
+<!--                    <div class="modal-dialog">-->
+<!--                        <div class="modal-content">-->
+<!--                            <div class="modal-header">-->
+<!--                                <h5 class="modal-title" id="editShipmentModalLabel">Редактировать поставку</h5>-->
+<!--                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>-->
+<!--                            </div>-->
+<!--                            <div class="modal-body">-->
+<!--                                <form th:action="@{/inventory/edit-shipment}" method="post" class="ajax-form">-->
+<!--                                    <input type="hidden" name="shipmentId" th:value="${shipment.id}">-->
+<!--                                    <input type="hidden" name="componentId" th:value="${component.id}">-->
+<!--                                    <input type="hidden" name="productId" th:value="${product.id}">-->
+<!--                                    <div class="mb-3">-->
+<!--                                        <label for="editPurchasePrice" class="form-label">Себестоимость (руб.)</label>-->
+<!--                                        <input type="number" class="form-control" id="editPurchasePrice" name="purchasePrice" th:value="${shipment.purchasePrice}" step="0.01" required>-->
+<!--                                    </div>-->
+<!--                                    <div class="mb-3">-->
+<!--                                        <label for="editQuantity" class="form-label">Количество</label>-->
+<!--                                        <input type="number" class="form-control" id="editQuantity" name="quantity" th:value="${shipment.quantity}" min="1" required>-->
+<!--                                    </div>-->
+<!--                                    <div class="mb-3">-->
+<!--                                        <label for="editPurchaseDate" class="form-label">Дата закупки</label>-->
+<!--                                        <input type="date" class="form-control" id="editPurchaseDate" name="purchaseDate" th:value="${#temporals.format(shipment.purchaseDate, 'yyyy-MM-dd')}" required>-->
+<!--                                    </div>-->
+<!--                                    <button type="submit" class="btn btn-primary">Сохранить</button>-->
+<!--                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>-->
+<!--                                </form>-->
+<!--                            </div>-->
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+<!--</div>-->
+
+<!--&lt;!&ndash; Полоса с информацией внизу &ndash;&gt;-->
+<!--<div class="footer">-->
+<!--    <p>Система складского учёта помогает управлять товарами, отслеживать запасы и анализировать финансовые показатели. Удобный интерфейс и интеграция с Ozon упрощают работу с ассортиментом.</p>-->
+<!--    <p>Свяжитесь с нами: <a href="mailto:artemsmirnovsmirnov@gmail.com">artemsmirnovsmirnov@gmail.com</a></p>-->
+<!--</div>-->
+
+<!--<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>-->
+<!--<script>-->
+<!--    // Функция для обновления нумерации строк в таблице партий-->
+<!--    function updateShipmentIndices(shipmentTable) {-->
+<!--        const rows = shipmentTable.querySelectorAll('tbody tr');-->
+<!--        rows.forEach((row, index) => {-->
+<!--            row.querySelector('.shipment-index').textContent = index + 1;-->
+<!--        });-->
+<!--    }-->
+
+<!--    // Обработка удаления компонента-->
+<!--    document.querySelectorAll('[data-action="deleteComponent"]').forEach(button => {-->
+<!--        button.addEventListener('click', function () {-->
+<!--            const componentId = this.getAttribute('data-id');-->
+<!--            const productId = this.getAttribute('data-product-id');-->
+<!--            const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));-->
+<!--            modal.show();-->
+<!--            document.getElementById('confirmDeleteBtn').onclick = () => {-->
+<!--                fetch(`/inventory/delete-component/${componentId}?productId=${productId}`, { method: 'DELETE' })-->
+<!--                    .then(response => {-->
+<!--                        if (response.ok) {-->
+<!--                            this.closest('.component-table').remove();-->
+<!--                            this.closest('.shipment-table')?.remove();-->
+<!--                        } else {-->
+<!--                            throw new Error('Ошибка при удалении');-->
+<!--                        }-->
+<!--                    })-->
+<!--                    .catch(error => {-->
+<!--                        console.error(error);-->
+<!--                        alert('Ошибка при удалении компонента');-->
+<!--                    })-->
+<!--                    .finally(() => {-->
+<!--                        modal.hide();-->
+<!--                    });-->
+<!--            };-->
+<!--        });-->
+<!--    });-->
+
+<!--    // Обработка удаления поставки-->
+<!--    document.querySelectorAll('[data-action="deleteShipment"]').forEach(button => {-->
+<!--        button.addEventListener('click', function () {-->
+<!--            const shipmentId = this.getAttribute('data-id');-->
+<!--            const componentId = this.getAttribute('data-component-id');-->
+<!--            const productId = this.getAttribute('data-product-id');-->
+<!--            const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));-->
+<!--            modal.show();-->
+<!--            document.getElementById('confirmDeleteBtn').onclick = () => {-->
+<!--                fetch(`/inventory/delete-shipment/${shipmentId}?componentId=${componentId}`, { method: 'DELETE' })-->
+<!--                    .then(response => {-->
+<!--                        if (response.ok) {-->
+<!--                            const shipmentTable = document.querySelector(`#shipmentTable${productId}-${componentId}`);-->
+<!--                            this.closest('tr').remove();-->
+<!--                            updateShipmentIndices(shipmentTable);-->
+<!--                            // Обновляем количество в компоненте-->
+<!--                            return fetch(`/inventory/component-quantity/${componentId}`);-->
+<!--                        } else {-->
+<!--                            throw new Error('Ошибка при удалении');-->
+<!--                        }-->
+<!--                    })-->
+<!--                    .then(response => response.json())-->
+<!--                    .then(data => {-->
+<!--                        const quantityCell = document.querySelector(`[data-id="${componentId}"]`).closest('tr').children[2];-->
+<!--                        quantityCell.textContent = data.quantity;-->
+<!--                    })-->
+<!--                    .catch(error => {-->
+<!--                        console.error(error);-->
+<!--                        alert('Ошибка при удалении поставки');-->
+<!--                    })-->
+<!--                    .finally(() => {-->
+<!--                        modal.hide();-->
+<!--                    });-->
+<!--            };-->
+<!--        });-->
+<!--    });-->
+
+<!--    // Обработка форм через AJAX-->
+<!--    document.querySelectorAll('.ajax-form').forEach(form => {-->
+<!--        form.addEventListener('submit', function (e) {-->
+<!--            e.preventDefault();-->
+<!--            const formData = new FormData(this);-->
+<!--            const action = this.getAttribute('action');-->
+<!--            const modal = bootstrap.Modal.getInstance(form.closest('.modal'));-->
+<!--            fetch(action, {-->
+<!--                method: 'POST',-->
+<!--                body: formData-->
+<!--            })-->
+<!--            .then(response => {-->
+<!--                if (!response.ok) throw new Error('Ошибка при сохранении');-->
+<!--                return response.json();-->
+<!--            })-->
+<!--            .then(data => {-->
+<!--                if (data.success) {-->
+<!--                    if (action.includes('create-shipment') || action.includes('edit-shipment')) {-->
+<!--                        const componentId = formData.get('componentId');-->
+<!--                        const productId = formData.get('productId');-->
+<!--                        fetch(`/inventory/shipments/${componentId}?productId=${productId}`)-->
+<!--                            .then(response => response.text())-->
+<!--                            .then(html => {-->
+<!--                                const shipmentTable = document.querySelector(`#shipmentTable${productId}-${componentId}`);-->
+<!--                                shipmentTable.innerHTML = html;-->
+<!--                                updateShipmentIndices(shipmentTable);-->
+<!--                                // Обновляем количество-->
+<!--                                return fetch(`/inventory/component-quantity/${componentId}`);-->
+<!--                            })-->
+<!--                            .then(response => response.json())-->
+<!--                            .then(data => {-->
+<!--                                const quantityCell = document.querySelector(`[data-id="${componentId}"]`).closest('tr').children[2];-->
+<!--                                quantityCell.textContent = data.quantity;-->
+<!--                            });-->
+<!--                    } else if (action.includes('edit-component')) {-->
+<!--                        const componentId = formData.get('componentId');-->
+<!--                        const newName = formData.get('componentName');-->
+<!--                        const nameCell = document.querySelector(`button[data-id="${componentId}"]`).closest('tr').children[1];-->
+<!--                        nameCell.textContent = newName;-->
+<!--                    }-->
+<!--                    modal.hide();-->
+<!--                } else {-->
+<!--                    throw new Error('Ошибка при сохранении');-->
+<!--                }-->
+<!--            })-->
+<!--            .catch(error => {-->
+<!--                console.error(error);-->
+<!--                alert('Ошибка при сохранении данных');-->
+<!--            });-->
+<!--        });-->
+<!--    });-->
+
+<!--    // Обработка создания компонента через AJAX-->
+<!--    document.getElementById('createComponentForm').addEventListener('submit', function (e) {-->
+<!--        e.preventDefault();-->
+<!--        const formData = new FormData(this);-->
+<!--        fetch(this.getAttribute('action'), {-->
+<!--            method: 'POST',-->
+<!--            body: formData-->
+<!--        })-->
+<!--        .then(response => response.json())-->
+<!--        .then(data => {-->
+<!--            if (data.success) {-->
+<!--                location.reload(); // Перезагрузка для добавления нового компонента-->
+<!--            } else {-->
+<!--                alert('Ошибка при создании компонента');-->
+<!--            }-->
+<!--        })-->
+<!--        .catch(error => {-->
+<!--            console.error(error);-->
+<!--            alert('Ошибка при создании компонента');-->
+<!--        });-->
+<!--    });-->
+<!--</script>-->
+<!--</body>-->
+<!--</html>-->
 

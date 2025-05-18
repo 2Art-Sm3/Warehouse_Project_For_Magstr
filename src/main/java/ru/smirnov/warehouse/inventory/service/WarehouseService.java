@@ -9,6 +9,7 @@ import ru.smirnov.warehouse.product.entity.Product;
 import ru.smirnov.warehouse.product.repository.ProductRepository;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -25,7 +26,7 @@ public class WarehouseService {
     }
 
     public int calculateTotalQuantity(Product product) {
-        List<Component> components = componentRepository.findByProduct(product);
+        List<Component> components = componentRepository.findByProductOrderByIdAsc(product);
         return components.stream()
                 .mapToInt(this::calculateComponentQuantity)
                 .sum();
@@ -39,11 +40,18 @@ public class WarehouseService {
     }
 
     public List<Component> getComponentsByProduct(Product product) {
-        return componentRepository.findByProduct(product);
+        return componentRepository.findByProductOrderByIdAsc(product);
     }
 
     public List<Shipment> getShipmentsByComponent(Component component) {
-        return shipmentRepository.findByComponentId(component.getId());
+        List<Shipment> shipments = shipmentRepository.findByComponentId(component.getId());
+        shipments.sort(Comparator.comparing(Shipment::getPurchaseDate));
+        return shipments;
+    }
+
+    public Component getComponentById(Long componentId) {
+        return componentRepository.findById(componentId)
+                .orElseThrow(() -> new IllegalArgumentException("Component not found: " + componentId));
     }
 
     public void createComponent(String name, Long productId) {

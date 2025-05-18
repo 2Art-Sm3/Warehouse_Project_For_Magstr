@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<table class="table table-striped table-bordered shipment-table collapse" th:fragment="shipmentTable" th:id="'shipmentTable' + ${product.id} + '-' + ${component.id}">
+    <thead>
+    <tr>
+        <th style="width: 10%;">#</th>
+        <th style="width: 30%;">Себестоимость</th>
+        <th style="width: 30%;">Количество</th>
+        <th style="width: 20%;">Дата закупки</th>
+        <th style="width: 10%;">Действия</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="shipment, shipStat : ${shipments}" th:attr="data-order=${shipStat.count}">
+        <td style="width: 10%;" class="shipment-index" th:text="${shipStat.count}"></td>
+        <td style="width: 30%;" th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></td>
+        <td style="width: 30%;" th:text="${shipment.quantity}"></td>
+        <td style="width: 20%;" th:text="${#temporals.format(shipment.purchaseDate, 'dd.MM.yyyy')}"></td>
+        <td style="width: 10%;">
+            <button type="button" class="btn btn-danger btn-sm me-1" th:attr="data-action='deleteShipment', data-id=${shipment.id}, data-component-id=${component.id}, data-product-id=${product.id}">Удалить</button>
+            <button type="button" class="btn btn-warning btn-sm" th:attr="data-bs-target='#editShipmentModal' + ${product.id} + '-' + ${component.id} + '-' + ${shipment.id}, data-bs-toggle='modal'">Редактировать</button>
+        </td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>

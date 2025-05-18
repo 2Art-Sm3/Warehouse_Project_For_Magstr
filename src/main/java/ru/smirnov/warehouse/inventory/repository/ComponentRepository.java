@@ -8,4 +8,5 @@ import java.util.List;
 
 public interface ComponentRepository extends JpaRepository<Component, Long> {
     List<Component> findByProduct(Product product);
+    List<Component> findByProductOrderByIdAsc(Product product);
 }
