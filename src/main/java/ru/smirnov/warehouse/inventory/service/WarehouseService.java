@@ -54,6 +54,11 @@ public class WarehouseService {
                 .orElseThrow(() -> new IllegalArgumentException("Component not found: " + componentId));
     }
 
+    public Shipment getShipmentById(Long shipmentId) {
+        return shipmentRepository.findById(shipmentId)
+                .orElseThrow(() -> new IllegalArgumentException("Shipment not found: " + shipmentId));
+    }
+
     public void createComponent(String name, Long productId) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));

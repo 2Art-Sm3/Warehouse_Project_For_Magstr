@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+
 @Controller
 @RequestMapping("/inventory")
 public class InventoryController {
@@ -114,5 +115,16 @@ public class InventoryController {
         model.addAttribute("component", component);
         model.addAttribute("product", productRepository.findById(productId).orElseThrow());
         return "fragments/shipments :: shipmentTable";
+    }
+
+    @GetMapping("/shipment/{shipmentId}")
+    @ResponseBody
+    public Map<String, Object> getShipment(@PathVariable Long shipmentId) {
+        Shipment shipment = warehouseService.getShipmentById(shipmentId);
+        Map<String, Object> response = new HashMap<>();
+        response.put("purchasePrice", shipment.getPurchasePrice());
+        response.put("quantity", shipment.getQuantity());
+        response.put("purchaseDate", shipment.getPurchaseDate().toString());
+        return response;
     }
 }

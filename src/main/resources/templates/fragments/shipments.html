@@ -19,7 +19,7 @@
         <td style="width: 20%;" th:text="${#temporals.format(shipment.purchaseDate, 'dd.MM.yyyy')}"></td>
         <td style="width: 10%;">
             <button type="button" class="btn btn-danger btn-sm me-1" th:attr="data-action='deleteShipment', data-id=${shipment.id}, data-component-id=${component.id}, data-product-id=${product.id}">Удалить</button>
-            <button type="button" class="btn btn-warning btn-sm" th:attr="data-bs-target='#editShipmentModal' + ${product.id} + '-' + ${component.id} + '-' + ${shipment.id}, data-bs-toggle='modal'">Редактировать</button>
+            <button type="button" class="btn btn-warning btn-sm" th:attr="data-action='editShipment', data-id=${shipment.id}, data-component-id=${component.id}, data-product-id=${product.id}">Редактировать</button>
         </td>
     </tr>
     </tbody>
