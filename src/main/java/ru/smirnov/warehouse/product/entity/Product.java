@@ -54,12 +54,14 @@ public class Product {
     @Column
     private String fulfillmentType;
 
-    @Column(columnDefinition = "BIT DEFAULT FALSE")
+    @Column(columnDefinition = "BOOLEAN DEFAULT FALSE")
     private Boolean hasAssembly; // Флаг наличия сборки
 
-    @ManyToOne
-    @JoinColumn(name = "user_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
     private User user;
+
+
 //      @Column
 //    private Double cost; // Себестоимость (рассчитывается)
 //    @Column

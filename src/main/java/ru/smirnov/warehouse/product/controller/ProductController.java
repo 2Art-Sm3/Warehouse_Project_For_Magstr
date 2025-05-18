@@ -22,7 +22,7 @@ public class ProductController {
 
     @GetMapping("/manage")
     public String showProductManagement(Model model) {
-//        productService.syncProductsWithOzon();
+
         List<Product> products = productService.getAllProducts();
         model.addAttribute("products", products);
         return "product";

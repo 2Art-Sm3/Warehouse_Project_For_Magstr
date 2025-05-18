@@ -10,11 +10,12 @@ import java.util.Optional;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
-    default List<Product> findAll() {
-        return findAll(Sort.by(Sort.Direction.ASC, "id"));
-    }
 
     Optional<Product> findByOfferId(String offerId);
 
     Optional<Product> findByOfferIdAndUser(String offerId, User user);
+
+    List<Product> findByUser(User currentUser);
+
+    List<Product> findByUser(User user, Sort sort);
 }

@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import ru.smirnov.warehouse.common.entity.User;
+import ru.smirnov.warehouse.common.repository.UserRepository;
 import ru.smirnov.warehouse.common.service.OzonService;
 import ru.smirnov.warehouse.product.entity.Product;
 import ru.smirnov.warehouse.product.repository.ProductRepository;
@@ -24,14 +26,17 @@ public class ProductService {
     private ProductRepository productRepository;
     private OzonService ozonService;
     private ObjectMapper objectMapper;
+    private UserRepository userRepository;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
     private static final Logger logger = LoggerFactory.getLogger(ProductService.class);
 
-    public ProductService(ProductRepository productRepository, OzonService ozonService, ObjectMapper objectMapper) {
+    public ProductService(ProductRepository productRepository, OzonService ozonService,
+                          ObjectMapper objectMapper, UserRepository userRepository) {
         this.productRepository = productRepository;
         this.ozonService = ozonService;
         this.objectMapper = objectMapper;
+        this.userRepository = userRepository;
     }
 
     private static double round(double value) {
@@ -43,37 +48,45 @@ public class ProductService {
     private User getCurrentUser() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         if (principal instanceof org.springframework.security.core.userdetails.User) {
-            String username = ((org.springframework.security.core.userdetails.User) principal).getUsername();
-            // Предполагается, что username — это email, так как вы используете email для логина
-            // Вам нужно внедрить UserRepository или сервис для поиска User по email
-            // Для примера предполагаем, что у вас есть доступ к User
-            // Реализуйте это согласно вашей логике
-            throw new UnsupportedOperationException("Implement fetching User by email: " + username);
+            String username = ((org.springframework.security.core.userdetails.User) principal).getUsername(); // email, так как usernameParameter("email")
+            return userRepository.findByUsername(username)
+                    .orElseThrow(() -> new IllegalStateException("User not found for email: " + username));
         }
         return (User) principal; // Предполагаем, что principal — это ваш объект User
     }
 
     public List<Product> getAllProducts() {
-        return productRepository.findAll();
+        User currentUser = getCurrentUser();
+
+        Sort sort = Sort.by(Sort.Direction.ASC, "id");
+        return productRepository.findByUser(currentUser, sort);
     }
 
     public Product getProductById(Long id) {
-        return productRepository.findById(id)
+        User currentUser = getCurrentUser();
+        Product product = productRepository.findById(id)
                 .orElseThrow(() -> new IllegalStateException("Товар не найден"));
+        if (!product.getUser().getId().equals(currentUser.getId())) {
+            throw new IllegalStateException("Товар не принадлежит текущему пользователю");
+        }
+        return product;
     }
 
     public Product saveProduct(Product product) {
+        if (product.getUser() == null) {
+            product.setUser(getCurrentUser());
+        }
         return productRepository.save(product);
     }
 
     public void deleteProduct(Long id) {
+        Product product = getProductById(id); // Уже включает проверку пользователя
         productRepository.deleteById(id);
     }
 
     public void syncProductsWithOzon() {
-        // Очистка таблицы перед новой синхронизацией
-//        productRepository.deleteAll();
-        logger.info("Cleared all products from the database");
+
+        User currentUser = getCurrentUser();
 
         // Получаем список товаров
         String lastId = "";
@@ -107,20 +120,17 @@ public class ProductService {
                     String sku = productInfoItem.path("sources").get(0).path("sku").asText();
                     String name = productInfoItem.path("name").asText();
 
-                    Optional<Product> existingProduct = productRepository.findByOfferId(offerId);
+                    Optional<Product> existingProduct = productRepository.findByOfferIdAndUser(offerId, currentUser);
                     Product product;
                     if (existingProduct.isPresent()) {
-                        // Если продукт существует, обновляем его
                         product = existingProduct.get();
                         logger.info("Updating existing product with offerId: {}", offerId);
                     } else {
-                        // Если продукта нет, создаём новый
                         product = new Product();
                         product.setOfferId(offerId);
+                        product.setUser(currentUser); // Добавлено: привязываем продукт к текущему пользователю
                         logger.info("Creating new product with offerId: {}", offerId);
                     }
-
-//                    product.setOfferId(offerId);
                     product.setSku(sku);
                     product.setName(name);
                     saveProduct(product);

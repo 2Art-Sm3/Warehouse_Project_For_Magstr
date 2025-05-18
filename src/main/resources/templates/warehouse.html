@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Warehouse</title>
+</head>
+<body>
+<h1>Warehouse</h1>
+<table>
+    <thead>
+    <tr>
+        <th>Product Name</th>
+        <th>In Stock</th>
+        <th>Producible</th>
+        <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="product : ${products}">
+        <td th:text="${product.name}"></td>
+        <td th:text="${product.quantityInStock}"></td>
+        <td th:text="${warehouseService.calculateProducibleQuantity(product)}"></td>
+        <td>
+            <form th:action="@{/warehouse/produce}" method="post">
+                <input type="hidden" name="productId" th:value="${product.id}"/>
+                <input type="number" name="quantity" min="1" required/>
+                <button type="submit">Produce</button>
+            </form>
+            <a th:href="@{/hierarchy/{id}(id=${product.id})}">Manage Hierarchy</a>
+        </td>
+    </tr>
+    </tbody>
+</table>
+
+<h2>Add Stock</h2>
+<form th:action="@{/warehouse/addStock}" method="post">
+    <label>Part:</label>
+    <select name="partId">
+        <option th:each="part : ${components}" th:if="${part.componentType == 'PART'}"
+                th:value="${part.id}" th:text="${part.name}"></option>
+    </select>
+    <label>Quantity:</label>
+    <input type="number" name="quantity" required/>
+    <label>Price:</label>
+    <input type="number" step="0.01" name="purchasePrice" required/>
+    <button type="submit">Add Stock</button>
+</form>
+</body>
+</html>
