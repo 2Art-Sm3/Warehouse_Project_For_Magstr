@@ -3,6 +3,7 @@ package ru.smirnov.warehouse.product.repository;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import ru.smirnov.warehouse.common.entity.User;
+import ru.smirnov.warehouse.hierarchy.entity.HierarchyNode;
 import ru.smirnov.warehouse.product.entity.Product;
 
 import java.util.List;
@@ -20,4 +21,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     List<Product> findByUser(User user, Sort sort);
 
     List<Product> findByUserUsername(String username);
+
+    List<Product> findByRootNode(HierarchyNode rootNode);
+
+
 }

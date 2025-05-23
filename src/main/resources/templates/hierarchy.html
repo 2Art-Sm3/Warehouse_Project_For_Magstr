@@ -67,7 +67,7 @@
         </div>
     </div>
     <h2>Иерархия товара: <span th:text="${product.name}"></span></h2>
-    <a href="/products" class="btn btn-info mb-3">Вернуться к товарам</a>
+    <a href="/products/manage" class="btn btn-info mb-3">Вернуться к товарам</a>
 
     <div class="hierarchy-container">
         <!-- Таблица товара -->
@@ -114,13 +114,19 @@
                     <tr>
                         <td th:text="${level.childNode.name}"></td>
                         <td>
-                            <input type="number" class="quantity-edit form-control" th:value="${level.childNode.quantity}"
-                                   th:id="'quantity' + ${level.childNode.id}" min="1" onchange="updateQuantity(${level.childNode.id}, this.value)">
-                            <button class="btn btn-sm btn-secondary action-btn" onclick="saveQuantity(${level.childNode.id})">Сохранить</button>
+                            <input type="number" class="quantity-edit form-control"
+                                   th:value="${level.childNode.quantity}"
+                                   th:id="'quantity' + ${level.childNode.id}"
+                                   min="1"
+                                   th:attr="onchange='updateQuantity(' + ${level.childNode.id} + ', this.value)'">
+                            <button class="btn btn-sm btn-secondary action-btn"
+                                    th:attr="onclick='saveQuantity(' + ${level.childNode.id} + ')'">Сохранить</button>
                         </td>
                         <td>
-                            <select class="form-select" th:if="${!level.childNode.isNode}" th:id="'unitCost' + ${level.childNode.id}"
-                                    onchange="updateUnitCost(${level.childNode.id}, this.value)">
+                            <select class="form-select"
+                                    th:if="${!level.childNode.isNode}"
+                                    th:id="'unitCost' + ${level.childNode.id}"
+                                    th:attr="onchange='updateUnitCost(' + ${level.childNode.id} + ', this.value)'">
                                 <option th:each="shipment : ${warehouseService.getShipmentsByComponent(level.childNode.component)}"
                                         th:value="${shipment.purchasePrice}"
                                         th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></option>
@@ -153,8 +159,15 @@
                         <input type="hidden" name="productId" th:value="${product.id}">
                         <div class="mb-3">
                             <label for="componentSelect" class="form-label">Компонент</label>
-                            <select class="form-select" id="componentSelect" name="componentId" required>
-                                <option th:each="component : ${components}" th:value="${component.id}" th:text="${component.name}"></option>
+                            <select class="form-select"
+                                    th:id="'componentSelect'"
+                                    name="componentId"
+                                    required
+                                    onchange="loadShipments('componentSelect','shipmentSelect')">
+                                <option value="">-- Выберите компонент --</option>
+                                <option th:each="component : ${components}"
+                                        th:value="${component.id}"
+                                        th:text="${component.name}"></option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -162,11 +175,12 @@
                             <input type="number" class="form-control" id="componentQuantity" name="quantity" min="1" required>
                         </div>
                         <div class="mb-3">
-                            <label for="unitCost" class="form-label">Себестоимость за шт.</label>
-                            <select class="form-select" id="unitCost" name="unitCost" required>
-                                <option th:each="component : ${components}" th:with="firstShipment=${warehouseService.getShipmentsByComponent(component)[0]}"
-                                        th:value="${firstShipment.purchasePrice}"
-                                        th:text="${#numbers.formatDecimal(firstShipment.purchasePrice, 2, 2)} + ' руб.'"></option>
+                            <label for="shipmentSelect" class="form-label">Себестоимость за шт.</label>
+                            <select class="form-select"
+                                    th:id="'shipmentSelect'"
+                                    name="unitCost"
+                                    required>
+                                <option value="">-- Сначала выберите компонент --</option>
                             </select>
                         </div>
                         <button type="submit" class="btn btn-primary">Создать</button>
@@ -220,8 +234,15 @@
                         <input type="hidden" name="productId" th:value="${product.id}">
                         <div class="mb-3">
                             <label th:for="'childComponentSelect' + ${level.childNode.id}" class="form-label">Компонент</label>
-                            <select class="form-select" th:id="'childComponentSelect' + ${level.childNode.id}" name="componentId" required>
-                                <option th:each="component : ${components}" th:value="${component.id}" th:text="${component.name}"></option>
+                            <select class="form-select"
+                                    th:id="'childComponentSelect' + ${level.childNode.id}"
+                                    name="componentId"
+                                    required
+                                    th:attr="onchange=|loadShipments('childComponentSelect${level.childNode.id}','childShipmentSelect${level.childNode.id}')|">
+                                <option value="">-- Выберите компонент --</option>
+                                <option th:each="component : ${components}"
+                                        th:value="${component.id}"
+                                        th:text="${component.name}"></option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -230,10 +251,11 @@
                         </div>
                         <div class="mb-3">
                             <label th:for="'childUnitCost' + ${level.childNode.id}" class="form-label">Себестоимость за шт.</label>
-                            <select class="form-select" th:id="'childUnitCost' + ${level.childNode.id}" name="unitCost" required>
-                                <option th:each="component : ${components}" th:with="firstShipment=${warehouseService.getShipmentsByComponent(component)[0]}"
-                                        th:value="${firstShipment.purchasePrice}"
-                                        th:text="${#numbers.formatDecimal(firstShipment.purchasePrice, 2, 2)} + ' руб.'"></option>
+                            <select class="form-select mt-2"
+                                    th:id="'childShipmentSelect' + ${level.childNode.id}"
+                                    name="unitCost"
+                                    required>
+                                <option value="">-- Сначала выберите компонент --</option>
                             </select>
                         </div>
                         <button type="submit" class="btn btn-primary">Создать</button>
@@ -310,6 +332,42 @@
                 });
         }
     }
+</script>
+<script>
+
+    /**
+  * Загружает цены (поставки) для выбранного компонента
+  * @param componentSelectId — id <select> с компонентами
+  * @param shipmentSelectId  — id <select> для списка цен
+  */
+ function loadShipments(componentSelectId, shipmentSelectId) {
+   const componentId = document.getElementById(componentSelectId).value;
+   const shipmentSelect = document.getElementById(shipmentSelectId);
+
+   shipmentSelect.innerHTML = '<option>Загрузка…</option>';
+
+   fetch(`/inventory/shipments/by-component/${componentId}`)
+     .then(resp => {
+       if (!resp.ok) throw new Error(resp.statusText);
+       return resp.json();
+     })
+     .then(data => {
+       shipmentSelect.innerHTML = '';
+       if (!data.length) {
+         shipmentSelect.innerHTML = '<option value="">Нет поставок</option>';
+         return;
+       }
+       data.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.price;
+        opt.textContent = `${s.price.toFixed(2)} руб. (от ${s.date.split('T')[0]})`;
+        shipmentSelect.appendChild(opt);
+       });
+     })
+     .catch(() => {
+       shipmentSelect.innerHTML = '<option>Ошибка загрузки</option>';
+     });
+ }
 </script>
 </body>
 </html>

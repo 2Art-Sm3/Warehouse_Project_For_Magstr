@@ -1,0 +1,883 @@
+Давай вернемся к проекту.
+Вот код некоторой части проекта:
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Иерархия товара</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .table-bordered th, .table-bordered td {
+            border: 1px solid #dee2e6;
+        }
+        .table thead th {
+            border-bottom: 2px solid #dee2e6;
+            vertical-align: middle;
+        }
+        .modal-dialog {
+            max-width: 400px;
+        }
+        .hierarchy-container {
+            position: relative;
+            margin-top: 20px;
+        }
+        .product-table {
+            width: 300px;
+            float: left;
+            margin-right: 20px;
+        }
+        .hierarchy-table {
+            display: inline-block;
+            vertical-align: top;
+            margin-left: 10px;
+        }
+        .hierarchy-line {
+            position: absolute;
+            border-left: 1px dashed #000;
+            height: 100%;
+            left: 310px; /* Смещение от левого края таблицы товара */
+        }
+        .node-table {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        .action-btn {
+            padding: 2px 6px;
+            font-size: 12px;
+        }
+        .quantity-edit {
+            width: 60px;
+            display: inline;
+        }
+        .footer {
+            margin-top: 50px;
+            padding: 20px 0;
+            background-color: rgba(233, 236, 239, 0.9);
+            text-align: center;
+            border: 1px solid #ced4da;
+            width: 100%;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4>Складской учет</h4>
+        <div>
+            <span class="me-3">Привет, <span th:text="${#authentication.name} ?: 'Гость'"></span></span>
+            <a href="/logout" class="btn btn-outline-danger btn-sm">Выход</a>
+        </div>
+    </div>
+    <h2>Иерархия товара: <span th:text="${product.name}"></span></h2>
+    <a href="/products/manage" class="btn btn-info mb-3">Вернуться к товарам</a>
+
+    <div class="hierarchy-container">
+        <!-- Таблица товара -->
+        <table class="table table-striped table-bordered product-table">
+            <thead>
+            <tr>
+                <th>Название</th>
+                <th>Себестоимость</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td th:text="${product.name}"></td>
+                <td th:text="${#numbers.formatDecimal(product.totalAssemblyCost ?: 0, 2, 2)} + ' руб.'"></td>
+            </tr>
+            </tbody>
+        </table>
+
+        <!-- Кнопка добавления элемента -->
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addComponentModal">
+            Добавить элемент
+        </button>
+        <button type="button" class="btn btn-secondary ms-2" data-bs-toggle="modal" data-bs-target="#addNodeModal">
+            Создать узел
+        </button>
+
+        <!-- Линия иерархии -->
+        <div class="hierarchy-line"></div>
+
+        <!-- Динамическая таблица иерархии -->
+        <div id="hierarchyTables" class="hierarchy-table">
+            <div th:each="level : ${hierarchy}">
+                <table class="table table-striped table-bordered node-table" th:id="'nodeTable' + ${level.childNode.id}">
+                    <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Количество</th>
+                        <th>Себестоимость за шт.</th>
+                        <th>Суммарная себестоимость</th>
+                        <th>Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td th:text="${level.childNode.name}"></td>
+                        <td>
+                            <input type="number" class="quantity-edit form-control" th:value="${level.childNode.quantity}"
+                                   th:id="'quantity' + ${level.childNode.id}" min="1" onchange="updateQuantity(${level.childNode.id}, this.value)">
+                            <button class="btn btn-sm btn-secondary action-btn" onclick="saveQuantity(${level.childNode.id})">Сохранить</button>
+                        </td>
+                        <td>
+                            <select class="form-select" th:if="${!level.childNode.isNode}" th:id="'unitCost' + ${level.childNode.id}"
+                                    onchange="updateUnitCost(${level.childNode.id}, this.value)">
+                                <option th:each="shipment : ${warehouseService.getShipmentsByComponent(level.childNode.component)}"
+                                        th:value="${shipment.purchasePrice}"
+                                        th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></option>
+                            </select>
+                            <span th:unless="${!level.childNode.isNode}" th:text="${#numbers.formatDecimal(level.childNode.unitCost ?: 0, 2, 2)} + ' руб.'"></span>
+                        </td>
+                        <td th:text="${#numbers.formatDecimal(level.childNode.totalCost ?: 0, 2, 2)} + ' руб.'"></td>
+                        <td>
+                            <button class="btn btn-danger btn-sm action-btn" th:onclick="'deleteNode(' + ${level.childNode.id} + ')'">Удалить</button>
+                            <button th:if="${level.childNode.isNode}" class="btn btn-primary btn-sm action-btn ms-1"
+                                    th:attr="data-bs-target='#addChildModal' + ${level.childNode.id}, data-bs-toggle='modal'">Добавить элемент</button>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления компонента -->
+    <div class="modal fade" id="addComponentModal" tabindex="-1" aria-labelledby="addComponentModalLabel">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addComponentModalLabel">Добавить компонент</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addComponentForm">
+                        <input type="hidden" name="productId" th:value="${product.id}">
+                        <div class="mb-3">
+                            <label for="componentSelect" class="form-label">Компонент</label>
+                            <select class="form-select" id="componentSelect" name="componentId" required>
+                                <option th:each="component : ${components}" th:value="${component.id}" th:text="${component.name}"></option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="componentQuantity" class="form-label">Количество</label>
+                            <input type="number" class="form-control" id="componentQuantity" name="quantity" min="1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="unitCost" class="form-label">Себестоимость за шт.</label>
+                            <select class="form-select" id="unitCost" name="unitCost" required>
+                                <option th:each="component : ${components}" th:with="firstShipment=${warehouseService.getShipmentsByComponent(component)[0]}"
+                                        th:value="${firstShipment.purchasePrice}"
+                                        th:text="${#numbers.formatDecimal(firstShipment.purchasePrice, 2, 2)} + ' руб.'"></option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Создать</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для создания узла -->
+    <div class="modal fade" id="addNodeModal" tabindex="-1" aria-labelledby="addNodeModalLabel">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addNodeModalLabel">Создать узел</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addNodeForm">
+                        <input type="hidden" name="productId" th:value="${product.id}">
+                        <div class="mb-3">
+                            <label for="nodeName" class="form-label">Имя узла</label>
+                            <input type="text" class="form-control" id="nodeName" name="nodeName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="nodeQuantity" class="form-label">Количество</label>
+                            <input type="number" class="form-control" id="nodeQuantity" name="quantity" min="1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Создать</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления дочернего элемента -->
+    <!-- Модальное окно для добавления дочернего элемента -->
+    <div th:each="level : ${hierarchy}" th:if="${level.childNode.isNode}"
+         class="modal fade" th:id="'addChildModal' + ${level.childNode.id}" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Добавить элемент в <span th:text="${level.childNode.name}"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form th:id="'addChildForm' + ${level.childNode.id}">
+                        <input type="hidden" name="parentNodeId" th:value="${level.childNode.id}">
+                        <input type="hidden" name="productId" th:value="${product.id}">
+                        <div class="mb-3">
+                            <label th:for="'childComponentSelect' + ${level.childNode.id}" class="form-label">Компонент</label>
+                            <select class="form-select" th:id="'childComponentSelect' + ${level.childNode.id}" name="componentId" required>
+                                <option th:each="component : ${components}" th:value="${component.id}" th:text="${component.name}"></option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label th:for="'childQuantity' + ${level.childNode.id}" class="form-label">Количество</label>
+                            <input type="number" class="form-control" th:id="'childQuantity' + ${level.childNode.id}" name="quantity" min="1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label th:for="'childUnitCost' + ${level.childNode.id}" class="form-label">Себестоимость за шт.</label>
+                            <select class="form-select" th:id="'childUnitCost' + ${level.childNode.id}" name="unitCost" required>
+                                <option th:each="component : ${components}" th:with="firstShipment=${warehouseService.getShipmentsByComponent(component)[0]}"
+                                        th:value="${firstShipment.purchasePrice}"
+                                        th:text="${#numbers.formatDecimal(firstShipment.purchasePrice, 2, 2)} + ' руб.'"></option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Создать</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Система складского учёта помогает управлять товарами, отслеживать запасы и анализировать финансовые показатели. Удобный интерфейс и интеграция с Ozon упрощают работу с ассортиментом.</p>
+        <p>Свяжитесь с нами: <a href="mailto:artemsmirnovsmirnov@gmail.com">artemsmirnovsmirnov@gmail.com</a></p>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    function updateQuantity(nodeId, quantity) {
+        fetch(/hierarchy/update-quantity/${nodeId}, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: quantity=${quantity}
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) location.reload();
+              else alert('Ошибка обновления количества');
+          });
+    }
+
+    function saveQuantity(nodeId) {
+        const quantity = document.getElementById(quantity${nodeId}).value;
+        updateQuantity(nodeId, quantity);
+    }
+
+    function updateUnitCost(nodeId, unitCost) {
+        fetch(/hierarchy/update-unit-cost/${nodeId}, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: unitCost=${unitCost}
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) location.reload();
+              else alert('Ошибка обновления себестоимости');
+          });
+    }
+
+    // Обработка форм
+    document.querySelectorAll('form[id^="addComponentForm"], form[id^="addNodeForm"], form[id^="addChildForm"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const url = this.id.includes('addComponent') ? '/hierarchy/create-component-node/' + formData.get('productId') :
+                        this.id.includes('addNode') ? '/hierarchy/create-node/' + formData.get('productId') :
+                        '/hierarchy/add-child-component/' + formData.get('parentNodeId') + '/' + formData.get('productId');
+            fetch(url, {
+                method: 'POST',
+                body: new URLSearchParams(formData)
+            }).then(response => response.text())
+              .then(data => {
+                  if (data === 'success') location.reload();
+                  else alert('Ошибка создания элемента');
+              });
+        });
+    });
+
+    function deleteNode(nodeId) {
+        if (confirm('Вы уверены, что хотите удалить этот элемент и все его подчинённые?')) {
+            fetch(/hierarchy/delete-node/${nodeId}, { method: 'DELETE' })
+                .then(response => response.text())
+                .then(data => {
+                    if (data === 'success') location.reload();
+                    else alert('Ошибка удаления');
+                });
+        }
+    }
+</script>
+</body>
+</html>
+
+package ru.smirnov.warehouse.hierarchy.service;
+
+import jakarta.persistence.EntityNotFoundException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import ru.smirnov.warehouse.hierarchy.entity.HierarchyLevel;
+import ru.smirnov.warehouse.hierarchy.entity.HierarchyNode;
+import ru.smirnov.warehouse.hierarchy.repository.HierarchyLevelRepository;
+import ru.smirnov.warehouse.hierarchy.repository.HierarchyNodeRepository;
+import ru.smirnov.warehouse.inventory.entity.Component;
+import ru.smirnov.warehouse.inventory.service.WarehouseService;
+import ru.smirnov.warehouse.product.entity.Product;
+import ru.smirnov.warehouse.product.repository.ProductRepository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class HierarchyService {
+
+    private final HierarchyNodeRepository hierarchyNodeRepository;
+    private final HierarchyLevelRepository levelRepository;
+    private final ProductRepository productRepository;
+    private final WarehouseService warehouseService;
+
+    public HierarchyNodeRepository getNodeRepository() {
+        return hierarchyNodeRepository;
+    }
+
+    public Product getProductByNode(Long nodeId) {
+        return levelRepository.findByChildNodeId(nodeId)
+                .stream().findFirst()
+                .map(HierarchyLevel::getProduct)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found for node: " + nodeId));
+    }
+
+    @Transactional
+    public HierarchyNode createComponentNode(Long productId, Long componentId, Integer quantity, Double unitCost) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+        Component component = warehouseService.getComponentById(componentId);
+        HierarchyNode node = new HierarchyNode();
+        node.setName(component.getName());
+        node.setQuantity(quantity);
+        node.setUnitCost(unitCost);
+        node.setTotalCost(unitCost * quantity);
+        node.setComponent(component);
+        node.setIsNode(false);
+        node = hierarchyNodeRepository.save(node);
+
+        HierarchyLevel level = new HierarchyLevel();
+        level.setProduct(product);
+        level.setChildNode(node);
+        level.setLevel(1); // Первый уровень
+        levelRepository.save(level);
+
+        updateProductAssemblyCost(product);
+        product.setHasAssembly(true);
+        product.setRootNode(node);
+        productRepository.save(product);
+        return node;
+    }
+
+    @Transactional
+    public HierarchyNode createNode(Long productId, String nodeName, Integer quantity) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+        HierarchyNode node = new HierarchyNode();
+        node.setName(nodeName);
+        node.setQuantity(quantity);
+        node.setUnitCost(0.0); // Изначально 0, рассчитывается позже
+        node.setTotalCost(0.0);
+        node.setIsNode(true);
+        node = hierarchyNodeRepository.save(node);
+
+        HierarchyLevel level = new HierarchyLevel();
+        level.setProduct(product);
+        level.setChildNode(node);
+        level.setLevel(1); // Первый уровень
+        levelRepository.save(level);
+
+        updateProductAssemblyCost(product);
+        product.setHasAssembly(true);
+        product.setRootNode(node);
+        productRepository.save(product);
+        return node;
+    }
+
+    @Transactional
+    public HierarchyNode addChildComponent(Long parentNodeId, Long productId, Long componentId, Integer quantity, Double unitCost) {
+        HierarchyNode parent = hierarchyNodeRepository.findById(parentNodeId)
+                .orElseThrow(() -> new IllegalArgumentException("Parent node not found: " + parentNodeId));
+        if (getMaxLevel(parentNodeId) >= 5) {
+            throw new IllegalArgumentException("Maximum hierarchy level (5) reached");
+        }
+
+        Component component = warehouseService.getComponentById(componentId);
+        HierarchyNode child = new HierarchyNode();
+        child.setName(component.getName());
+        child.setQuantity(quantity);
+        child.setUnitCost(unitCost);
+        child.setTotalCost(unitCost * quantity);
+        child.setComponent(component);
+        child.setIsNode(false);
+        child = hierarchyNodeRepository.save(child);
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+        HierarchyLevel level = new HierarchyLevel();
+        level.setProduct(product);
+        level.setParentNode(parent);
+        level.setChildNode(child);
+        level.setLevel(getLevel(parentNodeId) + 1);
+        levelRepository.save(level);
+
+        updateNodeCost(parent);
+        updateProductAssemblyCost(product);
+        return child;
+    }
+
+    @Transactional
+    public HierarchyNode addChildNode(Long parentNodeId, Long productId, String nodeName, Integer quantity) {
+        HierarchyNode parent = hierarchyNodeRepository.findById(parentNodeId)
+                .orElseThrow(() -> new IllegalArgumentException("Parent node not found: " + parentNodeId));
+        if (getMaxLevel(parentNodeId) >= 5) {
+            throw new IllegalArgumentException("Maximum hierarchy level (5) reached");
+        }
+
+        HierarchyNode child = new HierarchyNode();
+        child.setName(nodeName);
+        child.setQuantity(quantity);
+        child.setUnitCost(0.0);
+        child.setTotalCost(0.0);
+        child.setIsNode(true);
+        child = hierarchyNodeRepository.save(child);
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+        HierarchyLevel level = new HierarchyLevel();
+        level.setProduct(product);
+        level.setParentNode(parent);
+        level.setChildNode(child);
+        level.setLevel(getLevel(parentNodeId) + 1);
+        levelRepository.save(level);
+
+        updateNodeCost(parent);
+        updateProductAssemblyCost(product);
+        return child;
+    }
+
+    @Transactional
+    public void deleteNode(Long nodeId) {
+        HierarchyNode node = hierarchyNodeRepository.findById(nodeId)
+                .orElseThrow(() -> new EntityNotFoundException("Node not found with id " + nodeId));
+
+        // Отвязать все продукты, связанные с этим узлом
+        List<Product> products = productRepository.findByRootNode(node);
+        for (Product p : products) {
+            p.setRootNode(null); // отвязать
+        }
+        productRepository.saveAll(products);
+
+        // Удалить все уровни, где этот узел — parentNode или childNode
+        List<HierarchyLevel> parentLevels = levelRepository.findByParentNode(node);
+        levelRepository.deleteAll(parentLevels);
+
+        List<HierarchyLevel> childLevels = levelRepository.findByChildNode(node);
+        levelRepository.deleteAll(childLevels);
+
+        // Теперь можно удалить сам узел
+        hierarchyNodeRepository.delete(node);
+    }
+
+    private int getLevel(Long nodeId) {
+        HierarchyLevel level = levelRepository.findByChildNodeId(nodeId)
+                .stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Level not found for node: " + nodeId));
+        return level.getLevel();
+    }
+
+    private int getMaxLevel(Long nodeId) {
+        HierarchyNode node = hierarchyNodeRepository.findById(nodeId)
+                .orElseThrow(() -> new IllegalArgumentException("Node not found: " + nodeId));
+        if (!node.getIsNode()) return getLevel(nodeId);
+        List<HierarchyLevel> children = levelRepository.findByParentNodeId(nodeId);
+        if (children.isEmpty()) return getLevel(nodeId);
+        return children.stream().mapToInt(child -> getMaxLevel(child.getChildNode().getId())).max().orElse(getLevel(nodeId));
+    }
+
+    public void updateNodeCost(HierarchyNode node) {
+        if (!node.getIsNode()) return;
+        List<HierarchyLevel> children = levelRepository.findByParentNodeId(node.getId());
+        double totalCost = children.stream()
+                .mapToDouble(child -> child.getChildNode().getTotalCost() != null ? child.getChildNode().getTotalCost() : 0.0)
+                .sum();
+        node.setTotalCost(totalCost);
+        node.setUnitCost(totalCost / (node.getQuantity() != 0 ? node.getQuantity() : 1));
+        hierarchyNodeRepository.save(node);
+    }
+
+    public void updateParentCosts(Long nodeId) {
+        Optional<HierarchyLevel> parentLevel = levelRepository.findByChildNodeId(nodeId).stream().findFirst();
+        if (parentLevel.isPresent()) {
+            updateNodeCost(parentLevel.get().getParentNode());
+            updateParentCosts(parentLevel.get().getParentNode().getId());
+        }
+    }
+
+    public void updateProductAssemblyCost(Product product) {
+        List<HierarchyLevel> rootLevels = levelRepository.findByProductId(product.getId())
+                .stream().filter(l -> l.getParentNode() == null).toList();
+        double totalCost = rootLevels.stream()
+                .mapToDouble(l -> l.getChildNode().getTotalCost() != null ? l.getChildNode().getTotalCost() : 0.0)
+                .sum();
+        product.setTotalAssemblyCost(totalCost);
+        productRepository.save(product);
+    }
+
+    public List<HierarchyLevel> getHierarchy(Long productId) {
+        return levelRepository.findByProductId(productId);
+    }
+
+    public List<HierarchyNode> getAllNodes(Long productId) {
+        List<HierarchyLevel> levels = levelRepository.findByProductId(productId);
+        return levels.stream()
+                .map(HierarchyLevel::getChildNode)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+}
+
+package ru.smirnov.warehouse.hierarchy.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+import ru.smirnov.warehouse.hierarchy.entity.HierarchyNode;
+import ru.smirnov.warehouse.hierarchy.service.HierarchyService;
+import ru.smirnov.warehouse.inventory.service.WarehouseService;
+import ru.smirnov.warehouse.product.entity.Product;
+import ru.smirnov.warehouse.product.repository.ProductRepository;
+
+import java.security.Principal;
+import java.util.Map;
+
+@Controller
+@RequestMapping("/hierarchy")
+public class HierarchyController {
+
+    private final HierarchyService hierarchyService;
+    private final WarehouseService warehouseService;
+    private final ProductRepository productRepository;
+
+    public HierarchyController(HierarchyService hierarchyService, WarehouseService warehouseService, ProductRepository productRepository) {
+        this.hierarchyService = hierarchyService;
+        this.warehouseService = warehouseService;
+        this.productRepository = productRepository;
+    }
+
+    @ModelAttribute("warehouseService")
+    public WarehouseService warehouseService() {
+        return warehouseService;
+    }
+
+    @GetMapping("/{productId}")
+    public String showHierarchy(@PathVariable Long productId, Model model, Principal principal) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+        if (!product.getUser().getUsername().equals(principal.getName())) {
+            throw new SecurityException("Access denied");
+        }
+        model.addAttribute("product", product);
+        model.addAttribute("components", warehouseService.getComponentsByProduct(product));
+        model.addAttribute("hierarchy", hierarchyService.getHierarchy(productId));
+        model.addAttribute("rootNode", product.getRootNode());
+        model.addAttribute("allNodes", hierarchyService.getAllNodes(productId));
+        return "hierarchy";
+    }
+
+    @PostMapping("/{productId}")
+    public String addNode(@PathVariable Long productId,
+                          @RequestParam(required = false) Long parentNodeId,
+                          @RequestParam String name,
+                          @RequestParam Integer quantity) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+        if (parentNodeId == null) {
+            hierarchyService.createNode(productId, name, quantity);
+        } else {
+            hierarchyService.addChildNode(parentNodeId, productId, name, quantity);
+        }
+        product.setHasAssembly(true);
+        productRepository.save(product);
+        return "redirect:/hierarchy/" + productId;
+    }
+
+    @PostMapping("/create-component-node/{productId}")
+    @ResponseBody
+    public String createComponentNode(@PathVariable Long productId, @RequestParam Long componentId,
+                                      @RequestParam Integer quantity, @RequestParam Double unitCost) {
+        hierarchyService.createComponentNode(productId, componentId, quantity, unitCost);
+        return "success";
+    }
+
+    @PostMapping("/create-node/{productId}")
+    @ResponseBody
+    public String createNode(@PathVariable Long productId, @RequestParam String nodeName,
+                             @RequestParam Integer quantity) {
+        hierarchyService.createNode(productId, nodeName, quantity);
+        return "success";
+    }
+
+    @PostMapping("/add-child-component/{parentNodeId}/{productId}")
+    @ResponseBody
+    public String addChildComponent(@PathVariable Long parentNodeId, @PathVariable Long productId,
+                                    @RequestParam Long componentId, @RequestParam Integer quantity,
+                                    @RequestParam Double unitCost) {
+        hierarchyService.addChildComponent(parentNodeId, productId, componentId, quantity, unitCost);
+        return "success";
+    }
+
+    @PostMapping("/add-child-node/{parentNodeId}/{productId}")
+    @ResponseBody
+    public String addChildNode(@PathVariable Long parentNodeId, @PathVariable Long productId,
+                               @RequestParam String nodeName, @RequestParam Integer quantity) {
+        hierarchyService.addChildNode(parentNodeId, productId, nodeName, quantity);
+        return "success";
+    }
+
+    @DeleteMapping("/delete-node/{nodeId}")
+    @ResponseBody
+    public String deleteNode(@PathVariable Long nodeId) {
+        hierarchyService.deleteNode(nodeId);
+        return "success";
+    }
+
+    @PostMapping("/update-quantity/{nodeId}")
+    @ResponseBody
+    public Map<String, Boolean> updateQuantity(@PathVariable Long nodeId, @RequestParam Integer quantity) {
+        HierarchyNode node = hierarchyService.getNodeRepository().findById(nodeId)
+                .orElseThrow(() -> new IllegalArgumentException("Node not found: " + nodeId));
+        node.setQuantity(quantity);
+        node.setTotalCost(node.getUnitCost() != null ? node.getUnitCost() * quantity : 0.0);
+        hierarchyService.getNodeRepository().save(node);
+        hierarchyService.updateNodeCost(node);
+        hierarchyService.updateProductAssemblyCost(hierarchyService.getProductByNode(nodeId));
+        return Map.of("success", true);
+    }
+
+    @PostMapping("/update-unit-cost/{nodeId}")
+    @ResponseBody
+    public Map<String, Boolean> updateUnitCost(@PathVariable Long nodeId, @RequestParam Double unitCost) {
+        HierarchyNode node = hierarchyService.getNodeRepository().findById(nodeId)
+                .orElseThrow(() -> new IllegalArgumentException("Node not found: " + nodeId));
+        node.setUnitCost(unitCost);
+        node.setTotalCost(unitCost * node.getQuantity());
+        hierarchyService.getNodeRepository().save(node);
+        hierarchyService.updateNodeCost(node);
+        hierarchyService.updateProductAssemblyCost(hierarchyService.getProductByNode(nodeId));
+        return Map.of("success", true);
+    }
+
+    @PostMapping("/update-assembly-cost/{id}")
+    public String updateAssemblyCost(@PathVariable Long id, @RequestParam Double assemblyCost) {
+        HierarchyNode node = hierarchyService.getNodeRepository().findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Node not found: " + id));
+        node.setAssemblyCost(assemblyCost);
+        hierarchyService.getNodeRepository().save(node);
+        Product product = hierarchyService.getProductByNode(id);
+        hierarchyService.updateProductAssemblyCost(product);
+        return "redirect:/hierarchy/" + product.getId();
+    }
+}
+
+package ru.smirnov.warehouse.hierarchy.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import ru.smirnov.warehouse.product.entity.Product;
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "hierarchy_levels")
+public class HierarchyLevel {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id", nullable = false)
+    private Product product;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_node_id")
+    private HierarchyNode parentNode;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "child_node_id", nullable = false)
+    private HierarchyNode childNode;
+
+    @Column(nullable = false)
+    private Integer level; // Уровень иерархии (1-5)
+}
+package ru.smirnov.warehouse.hierarchy.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import ru.smirnov.warehouse.inventory.entity.Component;
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "hierarchy_nodes")
+public class HierarchyNode {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name; // Для узла — имя, для компонента — имя из Component
+
+    @Column(nullable = false)
+    private Integer quantity; // Количество компонентов или узлов
+
+    @Column
+    private Double unitCost; // Себестоимость за единицу (выбирается из партий для компонентов)
+
+    @Column
+    private Double totalCost; // Суммарная себестоимость (unitCost * quantity)
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "component_id")
+    private Component component; // Ссылка на компонент, если это компонентный узел
+
+    @Column(columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private Boolean isNode; // Флаг, указывающий, является ли это узлом (иначе — компонент)
+
+    @Column
+    private Double assemblyCost; // Поле для стоимости сборки
+}
+package ru.smirnov.warehouse.hierarchy.repository;
+
+import jakarta.transaction.Transactional;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import ru.smirnov.warehouse.hierarchy.entity.HierarchyLevel;
+import ru.smirnov.warehouse.hierarchy.entity.HierarchyNode;
+
+import java.util.List;
+
+public interface HierarchyLevelRepository extends JpaRepository<HierarchyLevel, Long> {
+    List<HierarchyLevel> findByProductId(Long productId);
+    List<HierarchyLevel> findByParentNodeId(Long parentNodeId);
+
+    @Query("SELECT hl FROM HierarchyLevel hl WHERE hl.childNode.id = :childNodeId")
+    List<HierarchyLevel> findByChildNodeId(Long childNodeId);
+
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM HierarchyLevel hl WHERE hl.childNode.id = :childNodeId")
+    void deleteByChildNodeId(Long childNodeId);
+
+    List<HierarchyLevel> findByParentNode(HierarchyNode parentNode);
+    List<HierarchyLevel> findByChildNode(HierarchyNode childNode);
+}
+package ru.smirnov.warehouse.hierarchy.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import ru.smirnov.warehouse.hierarchy.entity.HierarchyLevel;
+import ru.smirnov.warehouse.hierarchy.entity.HierarchyNode;
+
+import java.util.List;
+
+public interface HierarchyNodeRepository extends JpaRepository<HierarchyNode, Long> {
+
+}
+Весь код выше описывает страницу, на которой у нас есть возможность создать иерархию сборки товара, указать из каких компонентов состоит изделие (эти компоненты уже предварительно будут созданы на странице склада с указанными себестоимостями по каждой поставке). Также есть возможность создать узел (типо подсборки), которые в свою очередь включает в себя другие компоненты или такой же узел, для создания многоуровневой иерархии.
+И вот несколько проблем, которые появились в приложении: при добавлении элемента(компонента) в иерархии появляется окно, где можно выбрать детали со склада, но их себестоимость в окне отображается неверно, то есть, если на складе есть 2 поставки одного компонента, но по разным ценам, то в списке цен это не отобразиться, будет только первая цена.
+И если на складе есть несколько деталей, то, несмотря на то, что если в окне с выбором элемента для иерархии выбрать определенный компонент со склада, в строке со списком цен появляются цены и на другие компоненты, также в одном экземпляре, то есть без стоимостей других поставок. При создании узлов, можно также создать компонент и там в окне точно такая же ошибка.
+Помоги исправить эту проблему. Покажи исправленный код, указывай в коде, где находится этот кусок кода, который нужно исправить.
+Так как тут работа и с компонентами и поставками, то наверное пригодится и этот код:
+package ru.smirnov.warehouse.inventory.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import ru.smirnov.warehouse.product.entity.Product;
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "components")
+public class Component {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Column(nullable = false)
+    private Integer quantity;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id", nullable = false)
+    private Product product;
+}
+package ru.smirnov.warehouse.inventory.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.LocalDateTime;
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "shipments")
+public class Shipment {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private Double purchasePrice;
+
+    @Column(nullable = false)
+    private Integer quantity;
+
+    @Column(nullable = false)
+    private LocalDateTime purchaseDate;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "component_id", nullable = false)
+    private Component component;
+}
+Если надо могу привести еще необходимый код.

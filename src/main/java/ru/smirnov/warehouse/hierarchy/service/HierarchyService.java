@@ -1,5 +1,6 @@
 package ru.smirnov.warehouse.hierarchy.service;
 
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,13 +21,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class HierarchyService {
 
-    private final HierarchyNodeRepository nodeRepository;
+    private final HierarchyNodeRepository hierarchyNodeRepository;
     private final HierarchyLevelRepository levelRepository;
     private final ProductRepository productRepository;
     private final WarehouseService warehouseService;
 
     public HierarchyNodeRepository getNodeRepository() {
-        return nodeRepository;
+        return hierarchyNodeRepository;
     }
 
     public Product getProductByNode(Long nodeId) {
@@ -48,7 +49,7 @@ public class HierarchyService {
         node.setTotalCost(unitCost * quantity);
         node.setComponent(component);
         node.setIsNode(false);
-        node = nodeRepository.save(node);
+        node = hierarchyNodeRepository.save(node);
 
         HierarchyLevel level = new HierarchyLevel();
         level.setProduct(product);
@@ -73,7 +74,7 @@ public class HierarchyService {
         node.setUnitCost(0.0); // Изначально 0, рассчитывается позже
         node.setTotalCost(0.0);
         node.setIsNode(true);
-        node = nodeRepository.save(node);
+        node = hierarchyNodeRepository.save(node);
 
         HierarchyLevel level = new HierarchyLevel();
         level.setProduct(product);
@@ -90,7 +91,7 @@ public class HierarchyService {
 
     @Transactional
     public HierarchyNode addChildComponent(Long parentNodeId, Long productId, Long componentId, Integer quantity, Double unitCost) {
-        HierarchyNode parent = nodeRepository.findById(parentNodeId)
+        HierarchyNode parent = hierarchyNodeRepository.findById(parentNodeId)
                 .orElseThrow(() -> new IllegalArgumentException("Parent node not found: " + parentNodeId));
         if (getMaxLevel(parentNodeId) >= 5) {
             throw new IllegalArgumentException("Maximum hierarchy level (5) reached");
@@ -104,7 +105,7 @@ public class HierarchyService {
         child.setTotalCost(unitCost * quantity);
         child.setComponent(component);
         child.setIsNode(false);
-        child = nodeRepository.save(child);
+        child = hierarchyNodeRepository.save(child);
 
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
@@ -122,7 +123,7 @@ public class HierarchyService {
 
     @Transactional
     public HierarchyNode addChildNode(Long parentNodeId, Long productId, String nodeName, Integer quantity) {
-        HierarchyNode parent = nodeRepository.findById(parentNodeId)
+        HierarchyNode parent = hierarchyNodeRepository.findById(parentNodeId)
                 .orElseThrow(() -> new IllegalArgumentException("Parent node not found: " + parentNodeId));
         if (getMaxLevel(parentNodeId) >= 5) {
             throw new IllegalArgumentException("Maximum hierarchy level (5) reached");
@@ -134,7 +135,7 @@ public class HierarchyService {
         child.setUnitCost(0.0);
         child.setTotalCost(0.0);
         child.setIsNode(true);
-        child = nodeRepository.save(child);
+        child = hierarchyNodeRepository.save(child);
 
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
@@ -152,16 +153,25 @@ public class HierarchyService {
 
     @Transactional
     public void deleteNode(Long nodeId) {
-        HierarchyNode node = nodeRepository.findById(nodeId)
-                .orElseThrow(() -> new IllegalArgumentException("Node not found: " + nodeId));
-        List<HierarchyLevel> children = levelRepository.findByParentNodeId(nodeId);
-        for (HierarchyLevel child : children) {
-            deleteNode(child.getChildNode().getId());
+        HierarchyNode node = hierarchyNodeRepository.findById(nodeId)
+                .orElseThrow(() -> new EntityNotFoundException("Node not found with id " + nodeId));
+
+        // Отвязать все продукты, связанные с этим узлом
+        List<Product> products = productRepository.findByRootNode(node);
+        for (Product p : products) {
+            p.setRootNode(null); // отвязать
         }
-        levelRepository.deleteByChildNodeId(nodeId);
-        nodeRepository.delete(node);
-        updateParentCosts(nodeId);
-        updateProductAssemblyCost(getProductByNode(nodeId));
+        productRepository.saveAll(products);
+
+        // Удалить все уровни, где этот узел — parentNode или childNode
+        List<HierarchyLevel> parentLevels = levelRepository.findByParentNode(node);
+        levelRepository.deleteAll(parentLevels);
+
+        List<HierarchyLevel> childLevels = levelRepository.findByChildNode(node);
+        levelRepository.deleteAll(childLevels);
+
+        // Теперь можно удалить сам узел
+        hierarchyNodeRepository.delete(node);
     }
 
     private int getLevel(Long nodeId) {
@@ -172,7 +182,7 @@ public class HierarchyService {
     }
 
     private int getMaxLevel(Long nodeId) {
-        HierarchyNode node = nodeRepository.findById(nodeId)
+        HierarchyNode node = hierarchyNodeRepository.findById(nodeId)
                 .orElseThrow(() -> new IllegalArgumentException("Node not found: " + nodeId));
         if (!node.getIsNode()) return getLevel(nodeId);
         List<HierarchyLevel> children = levelRepository.findByParentNodeId(nodeId);
@@ -188,15 +198,19 @@ public class HierarchyService {
                 .sum();
         node.setTotalCost(totalCost);
         node.setUnitCost(totalCost / (node.getQuantity() != 0 ? node.getQuantity() : 1));
-        nodeRepository.save(node);
+        hierarchyNodeRepository.save(node);
     }
 
-    public void updateParentCosts(Long nodeId) {
-        Optional<HierarchyLevel> parentLevel = levelRepository.findByChildNodeId(nodeId).stream().findFirst();
-        if (parentLevel.isPresent()) {
-            updateNodeCost(parentLevel.get().getParentNode());
-            updateParentCosts(parentLevel.get().getParentNode().getId());
-        }
+    public void updateParentCosts(Long childNodeId) {
+        levelRepository.findByChildNodeId(childNodeId)
+                .stream()
+                .findFirst()
+                .map(HierarchyLevel::getParentNode)
+                .ifPresent(parent -> {
+                    // parent — ненулевой узел
+                    updateNodeCost(parent);
+                    updateParentCosts(parent.getId());
+                });
     }
 
     public void updateProductAssemblyCost(Product product) {

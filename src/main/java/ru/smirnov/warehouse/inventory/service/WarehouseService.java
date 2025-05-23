@@ -25,6 +25,11 @@ public class WarehouseService {
         this.productRepository = productRepository;
     }
 
+    public List<Shipment> getAllShipments() {
+        List<Shipment> list = shipmentRepository.findAll();
+        return list;
+    }
+
     public int calculateTotalQuantity(Product product) {
         List<Component> components = componentRepository.findByProductOrderByIdAsc(product);
         return components.stream()
@@ -42,6 +47,11 @@ public class WarehouseService {
     public List<Component> getComponentsByProduct(Product product) {
         return componentRepository.findByProductOrderByIdAsc(product);
     }
+
+    public List<Shipment> getShipmentsByComponentId(Long componentId) {
+        return shipmentRepository.findByComponentId(componentId);
+    }
+
 
     public List<Shipment> getShipmentsByComponent(Component component) {
         List<Shipment> shipments = shipmentRepository.findByComponentId(component.getId());

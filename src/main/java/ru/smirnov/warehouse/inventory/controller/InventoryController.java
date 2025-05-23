@@ -37,6 +37,17 @@ public class InventoryController {
         return "inventory";
     }
 
+    @GetMapping("/shipments/by-component/{componentId}")
+    @ResponseBody
+    public List<Map<String, Object>> getShipmentsByComponent(@PathVariable Long componentId) {
+        List<Shipment> shipments = warehouseService.getShipmentsByComponentId(componentId);
+        return shipments.stream().map(s -> Map.of(
+                "id",  (Object) s.getId(),
+                "price", s.getPurchasePrice(),
+                "date", s.getPurchaseDate().toString()
+        )).toList();
+    }
+
     @PostMapping("/create-component")
     @ResponseBody
     public Map<String, Boolean> createComponent(@RequestParam String componentName, @RequestParam Long productId) {
