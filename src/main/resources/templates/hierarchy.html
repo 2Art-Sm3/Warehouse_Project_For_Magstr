@@ -1,6 +1,3 @@
-
-
-
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
@@ -9,45 +6,74 @@
     <style>
         .table-bordered th, .table-bordered td {
             border: 1px solid #dee2e6;
+            font-size: 12px;
         }
         .table thead th {
             border-bottom: 2px solid #dee2e6;
             vertical-align: middle;
+            font-size: 13px;
         }
         .modal-dialog {
             max-width: 400px;
         }
         .hierarchy-container {
-            position: relative;
             margin-top: 20px;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
         }
         .product-table {
-            width: 300px;
-            float: left;
-            margin-right: 20px;
+            width: 100%;
+            max-width: 550px;
+            margin-bottom: 20px;
         }
         .hierarchy-table {
-            display: inline-block;
-            vertical-align: top;
-            margin-left: 10px;
+            width: 100%;
         }
-        .hierarchy-line {
+
+        .hierarchy-node-container {
+            position: relative;
+            padding-left: 25px;
+            padding-top: 10px;
+            margin-bottom: 5px;
+        }
+
+        .connector-line-horizontal {
             position: absolute;
-            border-left: 1px dashed #000;
-            height: 100%;
-            left: 310px; /* Смещение от левого края таблицы товара */
+            background-color: #888;
+            height: 1.5px;
+            top: 10px;
+            left: 12.5px;
+            width: 12.5px;
+            z-index: -1;
         }
+
+        .connector-line-vertical {
+            position: absolute;
+            background-color: #888;
+            width: 1.5px;
+            left: 11.75px;
+            z-index: -1;
+        }
+
         .node-table {
-            margin-left: 20px;
-            margin-top: 10px;
+            margin-top: 0;
+            width: 100%;
+            max-width: 600px;
         }
         .action-btn {
-            padding: 2px 6px;
-            font-size: 12px;
+            padding: 2px 5px;
+            font-size: 11px;
         }
         .quantity-edit {
-            width: 60px;
+            width: 55px;
             display: inline;
+            font-size: 12px;
+            padding: 0.25rem 0.5rem;
+        }
+        .form-select {
+            font-size: 12px;
+            padding: 0.25rem 1.5rem 0.25rem 0.5rem;
         }
         .footer {
             margin-top: 50px;
@@ -73,38 +99,64 @@
     <a href="/products/manage" class="btn btn-info mb-3">Вернуться к товарам</a>
 
     <div class="hierarchy-container">
-        <!-- Таблица товара -->
-        <table class="table table-striped table-bordered product-table">
-            <thead>
-            <tr>
-                <th>Название</th>
-                <th>Себестоимость</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr>
-                <td th:text="${product.name}"></td>
-                <td th:text="${#numbers.formatDecimal(product.totalAssemblyCost ?: 0, 2, 2)} + ' руб.'"></td>
-            </tr>
-            </tbody>
-        </table>
+        <!-- Flex container for Product Table and Main Action Buttons -->
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <!-- Таблица товара -->
+            <table class="table table-striped table-bordered product-table me-3">
+                <thead>
+                <tr>
+                    <th>Название</th>
+                    <th>Себестоимость</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td th:text="${product.name}"></td>
+                    <td th:text="${#numbers.formatDecimal(product.totalAssemblyCost ?: 0, 2, 2)} + ' руб.'"></td>
+                </tr>
+                </tbody>
+            </table>
 
-        <!-- Кнопка добавления элемента -->
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addComponentModal">
-            Добавить элемент
-        </button>
-        <button type="button" class="btn btn-secondary ms-2" data-bs-toggle="modal" data-bs-target="#addNodeModal">
-            Создать узел
-        </button>
-
-        <!-- Линия иерархии -->
-        <div class="hierarchy-line"></div>
+            <!-- Кнопки добавления элемента/узла для 1-го уровня -->
+            <div class="mt-2">
+                <button type="button" class="btn btn-primary d-block mb-2" data-bs-toggle="modal" data-bs-target="#addComponentModal">
+                    Добавить элемент
+                </button>
+                <button type="button" class="btn btn-secondary d-block" data-bs-toggle="modal" data-bs-target="#addNodeModal">
+                    Создать узел
+                </button>
+            </div>
+        </div>
 
         <!-- Динамическая таблица иерархии -->
         <div id="hierarchyTables" class="hierarchy-table">
-            <div th:each="level : ${hierarchy}">
+            <!-- Iterate over HierarchyViewEntry objects -->
+            <div th:each="viewEntry, iterStat : ${hierarchy}"
+                 th:with="node = ${viewEntry.childNode}, depth = ${viewEntry.depth}"
+                 class="hierarchy-node-container"
+                 th:style="'margin-left:' + (${depth} * 25) + 'px;'">
+
+                <!-- Connector Lines -->
+                <!-- Horizontal line: from the vertical stem to the node's table area (points right) -->
+                <div class="connector-line-horizontal"></div>
+
+                <!-- Vertical line segment for current node -->
+                <div class="connector-line-vertical"
+                     th:style="'top: 0px; height: ' + (${viewEntry.isLastChildOfParent} ? '10px' : 'calc(100% + 5px)') + ';'">
+                                <!-- If last child, height is only padding-top. Else, full height + margin-bottom to connect to next -->
+                </div>
+
+                 <!-- Special vertical line for depth 0 elements, connecting to product table area -->
+                 <div th:if="${depth == 0}" class="connector-line-vertical"
+                      th:style="'top: -20px; height: 30px; left: 11.75px;'">
+                      <!-- top: -20px (product table margin-bottom) -->
+                      <!-- height: 30px (20px margin + 10px padding-top of first item) -->
+                      <!-- left: 11.75px (align with other vertical stems) -->
+                 </div>
+
+
                 <table class="table table-striped table-bordered node-table"
-                       th:id="'nodeTable' + ${level.childNode.id}">
+                       th:id="'nodeTable' + ${node.id}">
                     <thead>
                     <tr>
                         <th>Название</th>
@@ -116,43 +168,43 @@
                     </thead>
                     <tbody>
                     <tr>
-                        <td th:text="${level.childNode.name}"></td>
+                        <td th:text="${node.name}"></td>
                         <td>
                             <input type="number" class="quantity-edit form-control"
-                                   th:id="'quantity' + ${level.childNode.id}"
-                                   th:value="${level.childNode.quantity}"
+                                   th:id="'quantity' + ${node.id}"
+                                   th:value="${node.quantity}"
                                    min="1"
-                                   th:attr="onchange=|updateQuantity(${level.childNode.id}, this.value)|">
+                                   th:attr="onchange=|updateQuantity(${node.id}, this.value)|">
                         </td>
                         <td>
                             <select
                                     class="form-select"
-                                    th:if="${!level.childNode.isNode}"
-                                    th:id="'unitCost' + ${level.childNode.id}"
-                                    th:attr="onchange=|updateUnitCost(${level.childNode.id}, this.value)|">
-                                <option th:each="shipment : ${warehouseService.getShipmentsByComponent(level.childNode.component)}"
+                                    th:if="${!node.isNode}"
+                                    th:id="'unitCost' + ${node.id}"
+                                    th:attr="onchange=|updateUnitCost(${node.id}, this.value)|">
+                                <option th:each="shipment : ${warehouseService.getShipmentsByComponent(node.component)}"
                                         th:value="${shipment.purchasePrice}"
                                         th:text="${#numbers.formatDecimal(shipment.purchasePrice,2,2)} + ' руб.'"
-                                        th:selected="${shipment.purchasePrice == level.childNode.unitCost}">
+                                        th:selected="${shipment.purchasePrice == node.unitCost}">
                                 </option>
                             </select>
-                            <span th:unless="${!level.childNode.isNode}"
-                                  th:text="${#numbers.formatDecimal(level.childNode.unitCost,2,2)} + ' руб.'"></span>
+                            <span th:unless="${!node.isNode}"
+                                  th:text="${#numbers.formatDecimal(node.unitCost,2,2)} + ' руб.'"></span>
                         </td>
-                        <td th:text="${#numbers.formatDecimal(level.childNode.totalCost ?: 0, 2, 2)} + ' руб.'"></td>
+                        <td th:text="${#numbers.formatDecimal(node.totalCost ?: 0, 2, 2)} + ' руб.'"></td>
                         <td>
                             <button class="btn btn-danger btn-sm action-btn"
-                                    th:onclick="'deleteNode(' + ${level.childNode.id} + ')'">
+                                    th:onclick="'deleteNode(' + ${node.id} + ')'">
                                 Удалить
                             </button>
-                            <button th:if="${level.childNode.isNode}"
+                            <button th:if="${node.isNode}"
                                     class="btn btn-primary btn-sm action-btn ms-1"
-                                    th:attr="data-bs-target='#addChildModal' + ${level.childNode.id}, data-bs-toggle='modal'">
+                                    th:attr="data-bs-target='#addChildModal' + ${node.id}, data-bs-toggle='modal'">
                                 Добавить элемент
                             </button>
-                            <button th:if="${level.childNode.isNode}"
+                            <button th:if="${node.isNode}"
                                     class="btn btn-secondary btn-sm action-btn ms-1"
-                                    th:attr="data-bs-target='#addChildNodeModal' + ${level.childNode.id}, data-bs-toggle='modal'">
+                                    th:attr="data-bs-target='#addChildNodeModal' + ${node.id}, data-bs-toggle='modal'">
                                 Создать узел
                             </button>
                         </td>
@@ -338,19 +390,6 @@
         const quantity = document.getElementById(`quantity${nodeId}`).value;
         updateQuantity(nodeId, quantity);
     }
-
-<!--    function updateQuantity(nodeId, quantity) {-->
-<!--    fetch(`/hierarchy/update-quantity/${nodeId}`, {-->
-<!--      method: 'POST',-->
-<!--      headers: {'Content-Type': 'application/x-www-form-urlencoded'},-->
-<!--      body: `quantity=${quantity}`-->
-<!--    })-->
-<!--    .then(resp => resp.json())-->
-<!--    .then(res => {-->
-<!--      if (res.success) location.reload();-->
-<!--      else alert('Ошибка обновления количества');-->
-<!--    });-->
-<!--  }-->
 
     // Обработка форм
     document.querySelectorAll('form[id^="addComponentForm"], form[id^="addNodeForm"], form[id^="addChildForm"]').forEach(form => {

@@ -12,9 +12,12 @@ import ru.smirnov.warehouse.inventory.entity.Component;
 import ru.smirnov.warehouse.inventory.service.WarehouseService;
 import ru.smirnov.warehouse.product.entity.Product;
 import ru.smirnov.warehouse.product.repository.ProductRepository;
+import ru.smirnov.warehouse.hierarchy.dto.HierarchyViewEntry;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -230,6 +233,69 @@ public class HierarchyService {
 
     public List<HierarchyLevel> getHierarchy(Long productId) {
         return levelRepository.findByProductId(productId);
+    }
+
+    public List<HierarchyViewEntry> getHierarchyView(Long productId) {
+        List<HierarchyLevel> allLevelsForProduct = levelRepository.findByProductId(productId);
+        if (allLevelsForProduct.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // Группируем всех детей по ID их родителя
+        Map<Long, List<HierarchyLevel>> childrenMap = allLevelsForProduct.stream()
+                .filter(hl -> hl.getParentNode() != null)
+                .collect(Collectors.groupingBy(hl -> hl.getParentNode().getId()));
+
+        // Сортируем списки детей у каждого родителя по ID дочернего узла (для стабильного порядка)
+        childrenMap.values().forEach(siblingList -> siblingList.sort(Comparator.comparing(hl -> hl.getChildNode().getId())));
+
+        // Находим корневые уровни (те, у которых нет родителя)
+        List<HierarchyLevel> rootLevels = allLevelsForProduct.stream()
+                .filter(hl -> hl.getParentNode() == null)
+                .sorted(Comparator.comparing(hl -> hl.getChildNode().getId())) // Сортируем корневые узлы
+                .collect(Collectors.toList());
+
+        List<HierarchyViewEntry> orderedViewEntries = new ArrayList<>();
+        // Рекурсивно строим отсортированный список для отображения
+        for (HierarchyLevel rootLevel : rootLevels) {
+            buildOrderedViewEntriesRecursive(rootLevel, childrenMap, orderedViewEntries, 0, rootLevels);
+        }
+        return orderedViewEntries;
+    }
+
+    private void buildOrderedViewEntriesRecursive(
+            HierarchyLevel currentHierarchyLevel,
+            Map<Long, List<HierarchyLevel>> childrenMap,
+            List<HierarchyViewEntry> orderedViewEntries,
+            int currentDepth, // 0-индексированная глубина
+            List<HierarchyLevel> siblingsOfCurrent // Список братьев и сестер текущего узла (включая его самого)
+    ) {
+        HierarchyNode currentNode = currentHierarchyLevel.getChildNode();
+        Long parentNodeId = currentHierarchyLevel.getParentNode() != null ? currentHierarchyLevel.getParentNode().getId() : null;
+
+        // Определяем, является ли текущий узел последним среди своих братьев и сестер
+        boolean isLastChild = true; // По умолчанию считаем последним
+        if (siblingsOfCurrent != null && !siblingsOfCurrent.isEmpty()) {
+            // Сравниваем ID текущего дочернего узла с ID дочернего узла последнего элемента в списке братьев/сестер
+            isLastChild = siblingsOfCurrent.get(siblingsOfCurrent.size() - 1).getChildNode().getId().equals(currentNode.getId());
+        }
+
+        orderedViewEntries.add(new HierarchyViewEntry(
+                currentNode,
+                currentDepth,
+                isLastChild,
+                parentNodeId,
+                currentHierarchyLevel.getLevel() // Исходный 1-индексированный уровень
+        ));
+
+        // Получаем детей текущего узла из карты
+        List<HierarchyLevel> childrenOfCurrent = childrenMap.getOrDefault(currentNode.getId(), new ArrayList<>());
+        // Дети уже отсортированы по ID при формировании childrenMap
+
+        for (HierarchyLevel childLevel : childrenOfCurrent) {
+            // Для дочерних узлов передаем их список братьев/сестер (childrenOfCurrent)
+            buildOrderedViewEntriesRecursive(childLevel, childrenMap, orderedViewEntries, currentDepth + 1, childrenOfCurrent);
+        }
     }
 
     public List<HierarchyNode> getAllNodes(Long productId) {

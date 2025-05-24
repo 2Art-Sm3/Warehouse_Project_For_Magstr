@@ -40,7 +40,7 @@ public class HierarchyController {
         }
         model.addAttribute("product", product);
         model.addAttribute("components", warehouseService.getComponentsByProduct(product));
-        model.addAttribute("hierarchy", hierarchyService.getHierarchy(productId));
+        model.addAttribute("hierarchy", hierarchyService.getHierarchyView(productId));
         model.addAttribute("rootNode", product.getRootNode());
         model.addAttribute("allNodes", hierarchyService.getAllNodes(productId));
         return "hierarchy";
