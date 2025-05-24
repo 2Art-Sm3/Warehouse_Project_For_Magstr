@@ -193,11 +193,16 @@ public class HierarchyService {
     public void updateNodeCost(HierarchyNode node) {
         if (!node.getIsNode()) return;
         List<HierarchyLevel> children = levelRepository.findByParentNodeId(node.getId());
-        double totalCost = children.stream()
-                .mapToDouble(child -> child.getChildNode().getTotalCost() != null ? child.getChildNode().getTotalCost() : 0.0)
-                .sum();
-        node.setTotalCost(totalCost);
-        node.setUnitCost(totalCost / (node.getQuantity() != 0 ? node.getQuantity() : 1));
+        double costPerUnit = children.stream()
+                .mapToDouble(child -> {
+                    HierarchyNode comp = child.getChildNode();
+                    double uc = comp.getUnitCost() != null ? comp.getUnitCost() : 0.0;
+                    int qtyPerUnit = comp.getQuantity() != null ? comp.getQuantity() : 0;
+                    return uc * qtyPerUnit;
+                }).sum();
+
+        node.setUnitCost(costPerUnit);
+        node.setTotalCost(costPerUnit * node.getQuantity());
         hierarchyNodeRepository.save(node);
     }
 

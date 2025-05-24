@@ -100,7 +100,8 @@
         <!-- Динамическая таблица иерархии -->
         <div id="hierarchyTables" class="hierarchy-table">
             <div th:each="level : ${hierarchy}">
-                <table class="table table-striped table-bordered node-table" th:id="'nodeTable' + ${level.childNode.id}">
+                <table class="table table-striped table-bordered node-table"
+                       th:id="'nodeTable' + ${level.childNode.id}">
                     <thead>
                     <tr>
                         <th>Название</th>
@@ -115,29 +116,42 @@
                         <td th:text="${level.childNode.name}"></td>
                         <td>
                             <input type="number" class="quantity-edit form-control"
-                                   th:value="${level.childNode.quantity}"
                                    th:id="'quantity' + ${level.childNode.id}"
+                                   th:value="${level.childNode.quantity}"
                                    min="1"
-                                   th:attr="onchange='updateQuantity(' + ${level.childNode.id} + ', this.value)'">
-                            <button class="btn btn-sm btn-secondary action-btn"
-                                    th:attr="onclick='saveQuantity(' + ${level.childNode.id} + ')'">Сохранить</button>
+                                   th:attr="onchange=|updateQuantity(${level.childNode.id}, this.value)|">
                         </td>
                         <td>
-                            <select class="form-select"
+                            <select
+                                    class="form-select"
                                     th:if="${!level.childNode.isNode}"
                                     th:id="'unitCost' + ${level.childNode.id}"
-                                    th:attr="onchange='updateUnitCost(' + ${level.childNode.id} + ', this.value)'">
+                                    th:attr="onchange=|updateUnitCost(${level.childNode.id}, this.value)|">
                                 <option th:each="shipment : ${warehouseService.getShipmentsByComponent(level.childNode.component)}"
                                         th:value="${shipment.purchasePrice}"
-                                        th:text="${#numbers.formatDecimal(shipment.purchasePrice, 2, 2)} + ' руб.'"></option>
+                                        th:text="${#numbers.formatDecimal(shipment.purchasePrice,2,2)} + ' руб.'"
+                                        th:selected="${shipment.purchasePrice == level.childNode.unitCost}">
+                                </option>
                             </select>
-                            <span th:unless="${!level.childNode.isNode}" th:text="${#numbers.formatDecimal(level.childNode.unitCost ?: 0, 2, 2)} + ' руб.'"></span>
+                            <span th:unless="${!level.childNode.isNode}"
+                                  th:text="${#numbers.formatDecimal(level.childNode.unitCost,2,2)} + ' руб.'"></span>
                         </td>
                         <td th:text="${#numbers.formatDecimal(level.childNode.totalCost ?: 0, 2, 2)} + ' руб.'"></td>
                         <td>
-                            <button class="btn btn-danger btn-sm action-btn" th:onclick="'deleteNode(' + ${level.childNode.id} + ')'">Удалить</button>
-                            <button th:if="${level.childNode.isNode}" class="btn btn-primary btn-sm action-btn ms-1"
-                                    th:attr="data-bs-target='#addChildModal' + ${level.childNode.id}, data-bs-toggle='modal'">Добавить элемент</button>
+                            <button class="btn btn-danger btn-sm action-btn"
+                                    th:onclick="'deleteNode(' + ${level.childNode.id} + ')'">
+                                Удалить
+                            </button>
+                            <button th:if="${level.childNode.isNode}"
+                                    class="btn btn-primary btn-sm action-btn ms-1"
+                                    th:attr="data-bs-target='#addChildModal' + ${level.childNode.id}, data-bs-toggle='modal'">
+                                Добавить элемент
+                            </button>
+                            <button th:if="${level.childNode.isNode}"
+                                    class="btn btn-secondary btn-sm action-btn ms-1"
+                                    th:attr="data-bs-target='#addChildNodeModal' + ${level.childNode.id}, data-bs-toggle='modal'">
+                                Создать узел
+                            </button>
                         </td>
                     </tr>
                     </tbody>
@@ -217,8 +231,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Модальное окно для добавления дочернего элемента -->
     <!-- Модальное окно для добавления дочернего элемента -->
     <div th:each="level : ${hierarchy}" th:if="${level.childNode.isNode}"
          class="modal fade" th:id="'addChildModal' + ${level.childNode.id}" tabindex="-1">
@@ -266,6 +278,38 @@
         </div>
     </div>
 
+    <div th:each="level : ${hierarchy}" th:if="${level.childNode.isNode}"
+         class="modal fade"
+         th:id="'addChildNodeModal' + ${level.childNode.id}"
+         tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        Создать узел внутри «<span th:text="${level.childNode.name}"></span>»
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form th:id="'addChildNodeForm' + ${level.childNode.id}">
+                        <input type="hidden" name="parentNodeId" th:value="${level.childNode.id}">
+                        <input type="hidden" name="productId" th:value="${product.id}">
+                        <div class="mb-3">
+                            <label class="form-label">Имя узла</label>
+                            <input type="text" class="form-control" name="nodeName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Количество</label>
+                            <input type="number" class="form-control" name="quantity" min="1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Создать</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="footer">
         <p>Система складского учёта помогает управлять товарами, отслеживать запасы и анализировать финансовые показатели. Удобный интерфейс и интеграция с Ozon упрощают работу с ассортиментом.</p>
         <p>Свяжитесь с нами: <a href="mailto:artemsmirnovsmirnov@gmail.com">artemsmirnovsmirnov@gmail.com</a></p>
@@ -275,33 +319,35 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     function updateQuantity(nodeId, quantity) {
-        fetch(`/hierarchy/update-quantity/${nodeId}`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: `quantity=${quantity}`
-        }).then(response => response.json())
-          .then(data => {
-              if (data.success) location.reload();
-              else alert('Ошибка обновления количества');
-          });
-    }
+    fetch(`/hierarchy/update-quantity/${nodeId}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: `quantity=${quantity}`
+    })
+    .then(resp => resp.json())
+    .then(res => {
+      if (res.success) location.reload();
+      else alert('Ошибка обновления количества');
+    });
+  }
 
     function saveQuantity(nodeId) {
         const quantity = document.getElementById(`quantity${nodeId}`).value;
         updateQuantity(nodeId, quantity);
     }
 
-    function updateUnitCost(nodeId, unitCost) {
-        fetch(`/hierarchy/update-unit-cost/${nodeId}`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: `unitCost=${unitCost}`
-        }).then(response => response.json())
-          .then(data => {
-              if (data.success) location.reload();
-              else alert('Ошибка обновления себестоимости');
-          });
-    }
+<!--    function updateQuantity(nodeId, quantity) {-->
+<!--    fetch(`/hierarchy/update-quantity/${nodeId}`, {-->
+<!--      method: 'POST',-->
+<!--      headers: {'Content-Type': 'application/x-www-form-urlencoded'},-->
+<!--      body: `quantity=${quantity}`-->
+<!--    })-->
+<!--    .then(resp => resp.json())-->
+<!--    .then(res => {-->
+<!--      if (res.success) location.reload();-->
+<!--      else alert('Ошибка обновления количества');-->
+<!--    });-->
+<!--  }-->
 
     // Обработка форм
     document.querySelectorAll('form[id^="addComponentForm"], form[id^="addNodeForm"], form[id^="addChildForm"]').forEach(form => {
@@ -332,10 +378,25 @@
                 });
         }
     }
-</script>
-<script>
+    document.querySelectorAll('form[id^="addChildNodeForm"]').forEach(form => {
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const data = new URLSearchParams(new FormData(form));
+      const parentNodeId = data.get('parentNodeId');
+      const productId    = data.get('productId');
+      fetch(`/hierarchy/add-child-node/${parentNodeId}/${productId}`, {
+        method: 'POST',
+        body: data
+      })
+      .then(r => r.text())
+      .then(txt => {
+        if (txt === 'success') location.reload();
+        else alert('Ошибка создания узла');
+      });
+    });
+  });
 
-    /**
+        /**
   * Загружает цены (поставки) для выбранного компонента
   * @param componentSelectId — id <select> с компонентами
   * @param shipmentSelectId  — id <select> для списка цен
@@ -368,6 +429,25 @@
        shipmentSelect.innerHTML = '<option>Ошибка загрузки</option>';
      });
  }
+    function updateUnitCost(nodeId, unitCost) {
+    fetch(`/hierarchy/update-unit-cost/${nodeId}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: `unitCost=${unitCost}`
+    })
+    .then(resp => resp.json())
+    .then(res => {
+      if (res.success) {
+        // перезагружаем, чтобы подтянуть новые totalCost и product.totalAssemblyCost
+        window.location.reload();
+      } else {
+        alert('Ошибка обновления себестоимости');
+      }
+    })
+    .catch(() => alert('Ошибка при запросе к серверу'));
+  }
+
 </script>
+
 </body>
 </html>

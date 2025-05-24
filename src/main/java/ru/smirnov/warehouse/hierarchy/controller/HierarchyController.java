@@ -126,6 +126,7 @@ public class HierarchyController {
         node.setTotalCost(unitCost * node.getQuantity());
         hierarchyService.getNodeRepository().save(node);
         hierarchyService.updateNodeCost(node);
+        hierarchyService.updateParentCosts(node.getId());
         hierarchyService.updateProductAssemblyCost(hierarchyService.getProductByNode(nodeId));
         return Map.of("success", true);
     }
