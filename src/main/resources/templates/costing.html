@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Юнит-экономика</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding-bottom: 100px; } /* Для футера */
+        .container { max-width: 1000px; }
+        .calculation-block { margin-bottom: 20px; padding: 15px; border: 1px solid #eee; border-radius: 5px; background-color: #f9f9f9;}
+        .calculation-block h5 { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 15px;}
+        .component-list { margin-left: 20px; }
+        .component-item { display: flex; justify-content: space-between; margin-bottom: 5px; padding: 5px; border-bottom: 1px dotted #eee; }
+        .component-item span { flex-basis: 22%; }
+        .component-item .name { flex-basis: 34%;}
+        .total-row { font-weight: bold; margin-top: 10px; padding-top:10px; border-top: 1px solid #ccc;}
+        .formula { color: #555; font-style: italic; font-size: 0.9em; }
+        .result { font-weight: bold; }
+        hr.section-divider { margin-top: 30px; margin-bottom: 30px; }
+        #comparisonModal .modal-body > div { padding: 10px; }
+        #comparisonModal .modal-body .col-md-6 { border-right: 1px solid #eee; }
+        #comparisonModal .modal-body .col-md-6:last-child { border-right: none; }
+        .footer {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            background-color: rgba(233, 236, 239, 0.9);
+            text-align: center;
+            padding: 15px 0;
+            border-top: 1px solid #ced4da;
+            font-size: 13px;
+            z-index: 1000;
+        }
+        .form-select-sm { font-size: 0.875rem; padding-top: 0.25rem; padding-bottom: 0.25rem;}
+    </style>
+</head>
+<body>
+
+<div class="container mt-3 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4>Складской учет</h4>
+        <div>
+            <span class="me-3">Привет, <span th:text="${#authentication.name} ?: 'Гость'"></span></span>
+            <a href="/dashboard" class="btn btn-info btn-sm">Главное меню</a>
+            <a href="/logout" class="btn btn-outline-danger btn-sm">Выход</a>
+        </div>
+    </div>
+
+    <h2 class="text-center mb-4">Юнит-экономика</h2>
+
+    <!-- Product Selection -->
+    <div class="row mb-4">
+        <div class="col-md-6 offset-md-3">
+            <label for="productSelect" class="form-label">Выберите товар:</label>
+            <select id="productSelect" class="form-select" onchange="handleProductChange()">
+                <option value="">-- Выберите товар --</option>
+                <option th:each="product : ${costingView.allUserProducts}"
+                        th:value="${product.id}"
+                        th:text="${product.name}"
+                        th:selected="${costingView.selectedProductId != null && product.id == costingView.selectedProductId}">
+                </option>
+            </select>
+        </div>
+    </div>
+
+    <div th:if="${costingView.selectedProductId == null}" class="alert alert-info text-center">
+        Пожалуйста, выберите товар для просмотра юнит-экономики.
+    </div>
+
+    <div th:if="${costingView.selectedProductId != null}">
+        <!-- Basic Calculation -->
+        <div class="calculation-block">
+            <h5>Базовый расчет</h5>
+            <p>Цена реализации: <span class="result" th:text="${#numbers.formatDecimal(costingView.productPrice, 1, 2, 'COMMA')} + ' руб.'"></span></p>
+
+            <h6>Расходы Ozon: <span class="result" th:text="${#numbers.formatDecimal(costingView.totalOzonExpenses, 1, 2, 'COMMA')} + ' руб.'"></span></h6>
+            <ul class="list-unstyled ms-3">
+                <li>Вознаграждение Ozon: <span th:text="${#numbers.formatDecimal(costingView.ozonReward, 1, 2, 'COMMA')} + ' руб.'"></span></li>
+                <li>Логистика: <span th:text="${#numbers.formatDecimal(costingView.logisticsFee, 1, 2, 'COMMA')} + ' руб.'"></span></li>
+                <li>Последняя миля: <span th:text="${#numbers.formatDecimal(costingView.lastMileFee, 1, 2, 'COMMA')} + ' руб.'"></span></li>
+                <li>Эквайринг: <span th:text="${#numbers.formatDecimal(costingView.acquiringFee, 1, 2, 'COMMA')} + ' руб.'"></span></li>
+                <li>Прочее: <span th:text="${#numbers.formatDecimal(costingView.otherFees, 1, 2, 'COMMA')} + ' руб.'"></span></li>
+            </ul>
+
+            <h6>Себестоимость</h6>
+            <div class="component-list">
+                <div th:each="comp : ${costingView.basicComponents}" class="component-item">
+                    <span class="name" th:text="${comp.name}">Компонент</span>
+                    <span><span th:text="${#numbers.formatDecimal(comp.unitCost, 1, 2, 'COMMA')}"></span> руб.</span>
+                    <span>x <span th:text="${comp.quantityInProduct}"></span> шт.</span>
+                    <span><span class="result" th:text="${#numbers.formatDecimal(comp.totalCostInProduct, 1, 2, 'COMMA')}"></span> руб.</span>
+                </div>
+                <div class="component-item total-row">
+                    <span class="name">Суммарная себестоимость изделия:</span>
+                    <span></span><span></span>
+                    <span><span class="result" id="basicTotalComponentsCost" th:text="${#numbers.formatDecimal(costingView.totalBasicComponentsCost, 1, 2, 'COMMA')}"></span> руб.</span>
+                </div>
+            </div>
+
+            <h6 class="mt-3">Суммарные переменные расходы на единицу</h6>
+            <p class="formula">Сум. Пер. Расх. на ед. = Себестоимость + Расходы Ozon</p>
+            <p><span th:text="${#numbers.formatDecimal(costingView.totalBasicComponentsCost, 1, 2, 'COMMA')}"></span> + <span th:text="${#numbers.formatDecimal(costingView.totalOzonExpenses, 1, 2, 'COMMA')}"></span> = <span class="result" id="basicTotalVariableExpenses" th:text="${#numbers.formatDecimal(costingView.basicTotalVariableExpenses, 1, 2, 'COMMA')} + ' руб.'"></span></p>
+
+            <h6 class="mt-3">Маржа</h6>
+            <p class="formula">Маржа = Цена реализации - Сум. Пер. Расх. на ед.</p>
+            <p><span th:text="${#numbers.formatDecimal(costingView.productPrice, 1, 2, 'COMMA')}"></span> - <span th:text="${#numbers.formatDecimal(costingView.basicTotalVariableExpenses, 1, 2, 'COMMA')}"></span> = <span class="result" id="basicMargin" th:text="${#numbers.formatDecimal(costingView.basicMargin, 1, 2, 'COMMA')} + ' руб.'"></span></p>
+
+            <h6 class="mt-3">Маржинальность</h6>
+            <p class="formula">Маржинальность = (Маржа / Цена реализации) * 100%</p>
+            <p>(<span th:text="${#numbers.formatDecimal(costingView.basicMargin, 1, 2, 'COMMA')}"></span> / <span th:text="${#numbers.formatDecimal(costingView.productPrice, 1, 2, 'COMMA')}"></span>) * 100% = <span class="result" id="basicMarginPercentage" th:text="${#numbers.formatDecimal(costingView.basicMarginPercentage, 1, 2, 'COMMA')} + '%'"></span></p>
+        </div>
+
+        <hr class="section-divider"/>
+
+        <!-- Alternative Scenario -->
+        <div class="calculation-block">
+            <h5>Альтернативный сценарий</h5>
+            <h6>Себестоимость</h6>
+            <div class="component-list">
+                <div th:each="comp : ${costingView.alternativeComponents}" class="component-item">
+                    <span class="name" th:text="${comp.name}">Компонент</span>
+                    <span>
+                        <select class="form-select form-select-sm alt-shipment-select"
+                                th:attr="data-component-id=${comp.componentId}"
+                                onchange="handleAlternativeShipmentChange()">
+                            <option th:if="${#lists.isEmpty(comp.availableShipmentPrices)}" value="" th:text="${#numbers.formatDecimal(comp.unitCost, 1, 2, 'COMMA')} + ' руб. (баз.)'" selected></option>
+                            <option th:each="shipmentPrice : ${comp.availableShipmentPrices}"
+                                    th:value="${shipmentPrice.shipmentId}"
+                                    th:text="${shipmentPrice.displayText}"
+                                    th:selected="${shipmentPrice.shipmentId == comp.selectedShipmentId}">
+                            </option>
+                        </select>
+                    </span>
+                    <span>x <span th:text="${comp.quantityInProduct}"></span> шт.</span>
+                    <span><span class="result alt-component-total-cost" th:text="${#numbers.formatDecimal(comp.totalCostInProduct, 1, 2, 'COMMA')}"></span> руб.</span>
+                </div>
+                 <div class="component-item total-row">
+                    <span class="name">Суммарная себестоимость изделия:</span>
+                    <span></span><span></span>
+                    <span><span class="result" id="alternativeTotalComponentsCost" th:text="${#numbers.formatDecimal(costingView.totalAlternativeComponentsCost, 1, 2, 'COMMA')}"></span> руб.</span>
+                </div>
+            </div>
+
+            <h6 class="mt-3">Расчеты</h6>
+            <p>Сум. Пер. Расх. на ед.: <span class="result" id="alternativeTotalVariableExpenses" th:text="${#numbers.formatDecimal(costingView.alternativeTotalVariableExpenses, 1, 2, 'COMMA')} + ' руб.'"></span></p>
+            <p>Маржа: <span class="result" id="alternativeMargin" th:text="${#numbers.formatDecimal(costingView.alternativeMargin, 1, 2, 'COMMA')} + ' руб.'"></span></p>
+            <p>Маржинальность: <span class="result" id="alternativeMarginPercentage" th:text="${#numbers.formatDecimal(costingView.alternativeMarginPercentage, 1, 2, 'COMMA')} + '%'"></span></p>
+        </div>
+
+        <div class="text-center mt-4">
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#comparisonModal" onclick="prepareComparisonData()">
+                Сравнить
+            </button>
+        </div>
+    </div> <!-- end th:if selectedProductId -->
+</div> <!-- end container -->
+
+<!-- Comparison Modal -->
+<div class="modal fade" id="comparisonModal" tabindex="-1" aria-labelledby="comparisonModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="comparisonModalLabel">Сравнение сценариев</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Базовый расчет</h6>
+                        <p>Маржа: <span class="result" id="modalBasicMargin"></span> руб.</p>
+                        <p>Маржинальность: <span class="result" id="modalBasicMarginPercentage"></span>%</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Альтернативный сценарий</h6>
+                        <p>Маржа: <span class="result" id="modalAlternativeMargin"></span> руб.</p>
+                        <p>Маржинальность: <span class="result" id="modalAlternativeMarginPercentage"></span>%</p>
+                    </div>
+                </div>
+                <hr>
+                <div id="comparisonRecommendation" class="mt-3 text-center">
+                    <!-- Recommendation will be inserted here by JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="footer">
+    <p>Система складского учёта помогает управлять товарами, отслеживать запасы и анализировать финансовые показатели. Удобный интерфейс и интеграция с Ozon упрощают работу с ассортиментом.</p>
+    <p>Свяжитесь с нами: <a href="mailto:artemsmirnovsmirnov@gmail.com">artemsmirnovsmirnov@gmail.com</a></p>
+</div>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    const selectedProductId = /*[[${costingView.selectedProductId}]]*/ null;
+    let currentAltSelectionsString = /*[[${altSelectionsString}]]*/ '';
+
+    function handleProductChange() {
+        const productId = document.getElementById('productSelect').value;
+        if (productId) {
+            // При смене продукта сбрасываем выборы альтернативных поставок,
+            // так как они относятся к компонентам предыдущего товара.
+            // Сервер сам подставит дефолтные для нового товара.
+            window.location.href = '/costing?productId=' + productId;
+        } else {
+            window.location.href = '/costing';
+        }
+    }
+
+    function handleAlternativeShipmentChange() {
+        if (!selectedProductId) return;
+
+        const selects = document.querySelectorAll('.alt-shipment-select');
+        let selections = [];
+        selects.forEach(select => {
+            const componentId = select.getAttribute('data-component-id');
+            const shipmentId = select.value;
+            if (componentId && shipmentId) {
+                selections.push(componentId + ':' + shipmentId);
+            }
+        });
+        currentAltSelectionsString = selections.join(',');
+        
+        // Формируем URL для перезагрузки с новыми параметрами
+        // Это гарантирует, что состояние сохраняется в URL и сервер его учтет
+        let url = '/costing?productId=' + selectedProductId;
+        if (currentAltSelectionsString) {
+            url += '&altSelections=' + encodeURIComponent(currentAltSelectionsString);
+        }
+        window.location.href = url;
+    }
+    
+    // Данные для POST запроса на сравнение
+    let comparisonData = {
+        basicMargin: 0,
+        basicMarginPercentage: 0,
+        basicProductPrice: 0,
+        alternativeMargin: 0,
+        alternativeMarginPercentage: 0,
+        alternativeTotalVariableExpenses: 0
+    };
+
+    function prepareComparisonData() {
+        // Эти значения уже должны быть на странице из CostingViewDTO
+        // Мы просто собираем их для отправки на сервер для расчета рекомендации
+        // И для отображения в модальном окне
+        
+        const costingView = /*[[${costingView}]]*/ {};
+
+        comparisonData.basicProductPrice = parseFloat(costingView.productPrice || 0);
+        comparisonData.basicMargin = parseFloat(costingView.basicMargin || 0);
+        comparisonData.basicMarginPercentage = parseFloat(costingView.basicMarginPercentage || 0);
+        
+        comparisonData.alternativeMargin = parseFloat(document.getElementById('alternativeMargin').textContent.replace(' руб.', '').replace(',', '.') || 0);
+        comparisonData.alternativeMarginPercentage = parseFloat(document.getElementById('alternativeMarginPercentage').textContent.replace('%', '').replace(',', '.') || 0);
+        
+        // Расходы Ozon одинаковы для обоих сценариев
+        const totalOzonExpenses = parseFloat(costingView.totalOzonExpenses || 0);
+        const totalAlternativeComponentsCost = parseFloat(document.getElementById('alternativeTotalComponentsCost').textContent.replace(' руб.', '').replace(',', '.') || 0);
+        comparisonData.alternativeTotalVariableExpenses = totalAlternativeComponentsCost + totalOzonExpenses;
+
+
+        // Заполняем модальное окно сразу
+        document.getElementById('modalBasicMargin').textContent = comparisonData.basicMargin.toFixed(2);
+        document.getElementById('modalBasicMarginPercentage').textContent = comparisonData.basicMarginPercentage.toFixed(2);
+        document.getElementById('modalAlternativeMargin').textContent = comparisonData.alternativeMargin.toFixed(2);
+        document.getElementById('modalAlternativeMarginPercentage').textContent = comparisonData.alternativeMarginPercentage.toFixed(2);
+
+        // Отправляем запрос на сервер для получения рекомендации
+        fetch('/costing/compare', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-XSRF-TOKEN': getCsrfToken()
+            },
+            body: JSON.stringify(comparisonData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('comparisonRecommendation').textContent = data.recommendation || 'Не удалось рассчитать рекомендацию.';
+        })
+        .catch(error => {
+            console.error('Error comparing scenarios:', error);
+            document.getElementById('comparisonRecommendation').textContent = 'Ошибка при расчете сравнения.';
+        });
+    }
+
+    function getCsrfToken() {
+        const token = document.querySelector('meta[name="_csrf"]');
+        return token ? token.getAttribute('content') : null;
+    }
+    
+    // Добавление CSRF токена, если используется Spring Security с CSRF
+    // <meta name="_csrf" th:content="${_csrf.token}"/>
+    // <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+    // В <head> страницы
+    // И затем в fetch: headers: { ..., [csrfHeader]: csrfToken }
+
+    /*]]>*/
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
