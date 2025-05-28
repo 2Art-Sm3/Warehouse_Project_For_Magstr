@@ -13,7 +13,9 @@ import ru.smirnov.warehouse.hierarchy.entity.HierarchyNode;
 @AllArgsConstructor
 @NoArgsConstructor
 @Entity
-@Table(name = "products")
+@Table(name = "products", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"offerId", "user_id"})
+})
 public class Product {
 
     @Id
@@ -22,7 +24,7 @@ public class Product {
 
     @Column(nullable = false)
     private String sku;
-    @Column(unique = true)
+    @Column
     private String offerId;
     @Column(nullable = false)
     private String name;
