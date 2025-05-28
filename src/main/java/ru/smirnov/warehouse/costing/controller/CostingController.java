@@ -6,6 +6,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import ru.smirnov.warehouse.costing.dto.CostingViewDTO;
 import ru.smirnov.warehouse.costing.service.CostingService;
+import ru.smirnov.warehouse.costing.dto.CostingProductDTO;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,26 +31,29 @@ public class CostingController {
         Map<Long, Long> alternativeShipmentSelections = parseAlternativeSelections(altSelectionsString);
 
         if (productId == null) {
-            // Если товар не выбран, загружаем список товаров и пустой DTO или DTO для первого товара
-            List<ru.smirnov.warehouse.costing.dto.CostingProductDTO> products = costingService.getUserProductsForCosting();
+            List<CostingProductDTO> products = costingService.getUserProductsForCosting();
             if (!products.isEmpty()) {
-                costingViewDTO = costingService.getCostingView(products.get(0).getId(), alternativeShipmentSelections);
+                productId = products.get(0).getId();
+                costingViewDTO = costingService.getCostingView(productId, alternativeShipmentSelections);
             } else {
-                costingViewDTO = new CostingViewDTO(); // Пустой DTO, если нет товаров
-                costingViewDTO.setAllUserProducts(new ArrayList<>());
+                costingViewDTO = CostingViewDTO.builder()
+                                   .allUserProducts(new ArrayList<>())
+                                   .componentInstances(new ArrayList<>())
+                                   .build();
             }
         } else {
             costingViewDTO = costingService.getCostingView(productId, alternativeShipmentSelections);
         }
+        
+        String updatedAltSelectionsString = buildAlternativeSelectionsString(costingViewDTO.getComponentInstances());
 
         model.addAttribute("costingView", costingViewDTO);
         model.addAttribute("selectedProductId", productId);
-        model.addAttribute("altSelectionsString", altSelectionsString); // Передаем обратно для сохранения в URL
+        model.addAttribute("altSelectionsString", updatedAltSelectionsString);
 
-        return "costing"; // Имя HTML файла
+        return "costing";
     }
 
-    // Parses a string like "componentId1:shipmentId1,componentId2:shipmentId2"
     private Map<Long, Long> parseAlternativeSelections(String altSelectionsString) {
         Map<Long, Long> selections = new HashMap<>();
         if (altSelectionsString != null && !altSelectionsString.isEmpty()) {
@@ -60,7 +64,7 @@ public class CostingController {
                     try {
                         selections.put(Long.parseLong(keyValue[0]), Long.parseLong(keyValue[1]));
                     } catch (NumberFormatException e) {
-                        // Log error or handle malformed pair
+                        System.err.println("Malformed selection pair: " + pair + ". Error: " + e.getMessage());
                     }
                 }
             }
@@ -68,27 +72,23 @@ public class CostingController {
         return selections;
     }
 
-    // Helper to build the altSelectionsString for URL redirects or AJAX updates
-    // Not strictly needed in controller if JS handles it, but can be useful
-    private String buildAlternativeSelectionsString(Map<Long, Long> selections) {
-        if (selections == null || selections.isEmpty()) return "";
-        return selections.entrySet().stream()
-                .map(entry -> entry.getKey() + ":" + entry.getValue())
+    private String buildAlternativeSelectionsString(List<ru.smirnov.warehouse.costing.dto.CostingComponentInstanceDTO> instances) {
+        if (instances == null || instances.isEmpty()) return "";
+        return instances.stream()
+                .filter(instance -> instance.getSelectedShipmentId() != null)
+                .map(instance -> instance.getHierarchyNodeId() + ":" + instance.getSelectedShipmentId())
                 .collect(Collectors.joining(","));
     }
 
     @PostMapping("/calculate-alternative")
-    @ResponseBody // Чтобы вернуть JSON для AJAX
+    @ResponseBody
     public CostingViewDTO calculateAlternative(@RequestParam Long productId,
                                                @RequestBody Map<String, String> selectionsPayload) {
-        // Преобразование Map<String, String> в Map<Long, Long> 
         Map<Long, Long> alternativeShipmentSelections = selectionsPayload.entrySet().stream()
             .collect(Collectors.toMap(
                 entry -> Long.parseLong(entry.getKey()),
-                entry -> Long.parseLong(entry.getValue()) 
+                entry -> Long.parseLong(entry.getValue())
             ));
-        // Возвращаем только часть DTO, относящуюся к альтернативным расчетам, или весь DTO
-        // Для простоты пока вернем весь, но можно оптимизировать
         return costingService.getCostingView(productId, alternativeShipmentSelections);
     }
 
@@ -96,7 +96,6 @@ public class CostingController {
     @ResponseBody
     public Map<String, Object> compareScenarios(@RequestBody CostingComparisonRequestDTO comparisonRequest) {
         Map<String, Object> result = new HashMap<>();
-        // Данные из запроса
         double basicMargin = comparisonRequest.getBasicMargin();
         double basicMarginPercentage = comparisonRequest.getBasicMarginPercentage();
         double basicProductPrice = comparisonRequest.getBasicProductPrice();
@@ -109,38 +108,38 @@ public class CostingController {
         result.put("alternativeMargin", alternativeMargin);
         result.put("alternativeMarginPercentage", alternativeMarginPercentage);
 
+        String recommendation;
         if (alternativeMarginPercentage < basicMarginPercentage) {
-            // (ЦенаРеализации - СумПерПеременныхРасх) / ЦенаРеализации = ЦелеваяМаржинальностьПроцент / 100
-            // ЦенаРеализации - СумПерПеременныхРасх = (ЦелеваяМаржинальностьПроцент / 100) * ЦенаРеализации
-            // ЦенаРеализации * (1 - ЦелеваяМаржинальностьПроцент / 100) = СумПерПеременныхРасх
-            // ЦенаРеализации = СумПерПеременныхРасх / (1 - ЦелеваяМаржинальностьПроцент / 100)
-            if (basicMarginPercentage >= 100) { // Предотвращение деления на ноль или отрицательное число
-                 result.put("recommendation", "Невозможно достичь базовой маржинальности (" + String.format("%.2f", basicMarginPercentage) + "%) с текущими переменными расходами в альтернативном сценарии.");
+            if (basicMarginPercentage >= 100 || (1 - (basicMarginPercentage / 100.0)) <= 0) {
+                 recommendation = "Невозможно достичь базовой маржинальности (" + String.format("%.2f", basicMarginPercentage) + "%) с текущими переменными расходами в альтернативном сценарии.";
             } else {
                 double requiredPrice = alternativeTotalVariableExpenses / (1 - (basicMarginPercentage / 100.0));
-                result.put("recommendation", String.format(
+                recommendation = String.format(
                     "Для сохранения маржинальности в %.2f%%, цена реализации должна составлять %.2f руб.",
                     basicMarginPercentage,
                     round(requiredPrice)
-                ));
+                );
             }
         } else if (alternativeMarginPercentage > basicMarginPercentage) {
-            result.put("recommendation", String.format(
+            recommendation = String.format(
                 "Ваша маржинальность выросла на %.2f%%.",
                 round(alternativeMarginPercentage - basicMarginPercentage)
-            ));
+            );
         } else {
-            result.put("recommendation", "Маржинальность не изменилась.");
+            recommendation = "Маржинальность не изменилась.";
         }
+        result.put("recommendation", recommendation);
         return result;
     }
 
     private double round(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return 0.0;
+        }
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
-    // DTO для запроса сравнения
-    @lombok.Getter @lombok.Setter
+    @lombok.Data
     static class CostingComparisonRequestDTO {
         private double basicMargin;
         private double basicMarginPercentage;

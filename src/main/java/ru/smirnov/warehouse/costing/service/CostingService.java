@@ -4,12 +4,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ru.smirnov.warehouse.common.entity.User;
 import ru.smirnov.warehouse.common.service.UserService;
-import ru.smirnov.warehouse.costing.dto.CostingComponentDTO;
+import ru.smirnov.warehouse.costing.dto.CostingComponentInstanceDTO;
 import ru.smirnov.warehouse.costing.dto.CostingProductDTO;
 import ru.smirnov.warehouse.costing.dto.CostingViewDTO;
-import ru.smirnov.warehouse.hierarchy.entity.HierarchyLevel;
 import ru.smirnov.warehouse.hierarchy.entity.HierarchyNode;
-import ru.smirnov.warehouse.hierarchy.repository.HierarchyLevelRepository;
+import ru.smirnov.warehouse.hierarchy.service.HierarchyService;
+import ru.smirnov.warehouse.hierarchy.dto.HierarchyViewEntry;
 import ru.smirnov.warehouse.inventory.entity.Component;
 import ru.smirnov.warehouse.inventory.entity.Shipment;
 import ru.smirnov.warehouse.inventory.repository.ComponentRepository;
@@ -35,13 +35,13 @@ import java.util.stream.Collectors;
 public class CostingService {
 
     private final ProductRepository productRepository;
-    private final HierarchyLevelRepository hierarchyLevelRepository;
-    private final ComponentRepository componentRepository; // Предполагая, что он есть
-    private final ShipmentRepository shipmentRepository;   // Предполагая, что он есть
+    private final HierarchyService hierarchyService;
+    private final ComponentRepository componentRepository;
+    private final ShipmentRepository shipmentRepository;
     private final UserRepository userRepository;
 
     private static final DateTimeFormatter SHIPMENT_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy");
-    private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#.##");
+    private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#,##0.00");
 
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -56,177 +56,151 @@ public class CostingService {
                 .collect(Collectors.toList());
     }
 
-    public CostingViewDTO getCostingView(Long productId, Map<Long, Long> alternativeShipmentSelections) {
+    public CostingViewDTO getCostingView(Long productId, Map<Long, Long> alternativeShipmentSelectionsByNodeId) {
         User currentUser = getCurrentUser();
         Product product = productRepository.findById(productId)
                 .filter(p -> p.getUser().getId().equals(currentUser.getId()))
                 .orElseThrow(() -> new IllegalArgumentException("Product not found or access denied: " + productId));
 
-        CostingViewDTO viewDTO = new CostingViewDTO();
-        viewDTO.setSelectedProductId(product.getId());
-        viewDTO.setSelectedProductName(product.getName());
-        viewDTO.setProductPrice(product.getPrice() != null ? product.getPrice() : 0.0);
+        CostingViewDTO.CostingViewDTOBuilder viewDTOBuilder = CostingViewDTO.builder()
+                .selectedProductId(product.getId())
+                .selectedProductName(product.getName())
+                .productPrice(product.getPrice() != null ? product.getPrice() : 0.0);
 
         // Ozon Expenses
-        viewDTO.setOzonReward(product.getOzonReward() != null ? product.getOzonReward() : 0.0);
-        viewDTO.setLogisticsFee(product.getLogisticsFee() != null ? product.getLogisticsFee() : 0.0);
-        viewDTO.setLastMileFee(product.getLastMileFee() != null ? product.getLastMileFee() : 0.0);
-        viewDTO.setAcquiringFee(product.getAcquiringFee() != null ? product.getAcquiringFee() : 0.0);
-        viewDTO.setOtherFees(product.getOtherFees() != null ? product.getOtherFees() : 0.0);
-        double totalOzonExpenses = viewDTO.getOzonReward() + viewDTO.getLogisticsFee() +
-                                   viewDTO.getLastMileFee() + viewDTO.getAcquiringFee() + viewDTO.getOtherFees();
-        viewDTO.setTotalOzonExpenses(round(totalOzonExpenses));
+        double ozonReward = product.getOzonReward() != null ? product.getOzonReward() : 0.0;
+        double logisticsFee = product.getLogisticsFee() != null ? product.getLogisticsFee() : 0.0;
+        double lastMileFee = product.getLastMileFee() != null ? product.getLastMileFee() : 0.0;
+        double acquiringFee = product.getAcquiringFee() != null ? product.getAcquiringFee() : 0.0;
+        double otherFees = product.getOtherFees() != null ? product.getOtherFees() : 0.0;
+        double totalOzonExpenses = ozonReward + logisticsFee + lastMileFee + acquiringFee + otherFees;
 
-        // Flattened components list (Map<Component Original ID, Total Quantity>)
-        Map<Long, Integer> componentQuantitiesInProduct = new HashMap<>();
-        List<HierarchyLevel> productHierarchy = hierarchyLevelRepository.findByProductId(product.getId());
-        collectComponentQuantitiesRecursive(productHierarchy, null, 1, componentQuantitiesInProduct);
+        viewDTOBuilder
+            .ozonReward(ozonReward)
+            .logisticsFee(logisticsFee)
+            .lastMileFee(lastMileFee)
+            .acquiringFee(acquiringFee)
+            .otherFees(otherFees)
+            .totalOzonExpenses(round(totalOzonExpenses));
 
-        // Basic Components Calculation
-        List<CostingComponentDTO> basicComponents = new ArrayList<>();
-        double totalBasicComponentsCost = 0;
-        for (Map.Entry<Long, Integer> entry : componentQuantitiesInProduct.entrySet()) {
-            Long componentId = entry.getKey();
-            Integer totalQuantity = entry.getValue();
-            HierarchyNode nodeDetails = findHierarchyNodeForComponent(productHierarchy, componentId);
-            Component originalComponent = componentRepository.findById(componentId).orElse(null);
+        List<HierarchyViewEntry> hierarchyEntries = hierarchyService.getHierarchyView(product.getId());
+        List<CostingComponentInstanceDTO> componentInstances = new ArrayList<>();
+        if (alternativeShipmentSelectionsByNodeId == null) alternativeShipmentSelectionsByNodeId = new HashMap<>();
 
-            if (nodeDetails != null && originalComponent != null) {
-                double unitCost = nodeDetails.getUnitCost() != null ? nodeDetails.getUnitCost() : 0.0;
-                double totalCostInProduct = unitCost * totalQuantity;
-                basicComponents.add(new CostingComponentDTO(
-                        componentId,
-                        originalComponent.getName(),
-                        round(unitCost),
-                        totalQuantity,
-                        round(totalCostInProduct),
-                        null, // No shipment prices for basic
-                        null  // No selected shipment for basic
-                ));
-                totalBasicComponentsCost += totalCostInProduct;
+        for (HierarchyViewEntry viewEntry : hierarchyEntries) {
+            HierarchyNode node = viewEntry.getChildNode();
+            if (node.getIsNode() || node.getComponent() == null) { // Skip nodes/sub-assemblies and nodes without components
+                continue;
             }
-        }
-        viewDTO.setBasicComponents(basicComponents);
-        viewDTO.setTotalBasicComponentsCost(round(totalBasicComponentsCost));
 
-        // Basic Calculation Results
-        double basicTotalVariableExpenses = totalBasicComponentsCost + totalOzonExpenses;
-        viewDTO.setBasicTotalVariableExpenses(round(basicTotalVariableExpenses));
-        double basicMargin = viewDTO.getProductPrice() - basicTotalVariableExpenses;
-        viewDTO.setBasicMargin(round(basicMargin));
-        viewDTO.setBasicMarginPercentage(viewDTO.getProductPrice() > 0 ? round((basicMargin / viewDTO.getProductPrice()) * 100) : 0.0);
+            Component originalComponent = node.getComponent(); // Already fetched by HierarchyService's DTO building
 
-        // Alternative Components Calculation
-        List<CostingComponentDTO> alternativeComponents = new ArrayList<>();
-        double totalAlternativeComponentsCost = 0;
-        if (alternativeShipmentSelections == null) alternativeShipmentSelections = new HashMap<>();
+            double unitCostFromHierarchy = node.getUnitCost() != null ? node.getUnitCost() : 0.0;
+            int quantityInProduct = node.getQuantity(); // This is the quantity of this specific node
+            double totalCostFromHierarchy = unitCostFromHierarchy * quantityInProduct;
 
-        for (Map.Entry<Long, Integer> entry : componentQuantitiesInProduct.entrySet()) {
-            Long componentId = entry.getKey();
-            Integer totalQuantity = entry.getValue();
-            Component originalComponent = componentRepository.findById(componentId).orElse(null);
-            if (originalComponent == null) continue;
-
-            List<Shipment> shipments = shipmentRepository.findByComponentId(componentId);
-            List<CostingComponentDTO.ShipmentPriceDTO> shipmentPrices = shipments.stream()
-                .map(s -> new CostingComponentDTO.ShipmentPriceDTO(
-                        s.getId(),
-                        s.getPurchasePrice(),
-                        String.format("%s руб. (от %s)", 
-                                      DECIMAL_FORMAT.format(s.getPurchasePrice()), 
-                                      s.getPurchaseDate().format(SHIPMENT_DATE_FORMATTER))))
+            List<Shipment> shipments = shipmentRepository.findByComponentId(originalComponent.getId());
+            List<CostingComponentInstanceDTO.ShipmentPriceDTO> shipmentPrices = shipments.stream()
+                .map(s -> CostingComponentInstanceDTO.ShipmentPriceDTO.builder()
+                        .shipmentId(s.getId())
+                        .price(s.getPurchasePrice())
+                        .displayText(String.format("%s руб. (от %s)",
+                                     DECIMAL_FORMAT.format(s.getPurchasePrice()),
+                                     s.getPurchaseDate().format(SHIPMENT_DATE_FORMATTER)))
+                        .build())
                 .collect(Collectors.toList());
 
-            Long selectedShipmentId = alternativeShipmentSelections.getOrDefault(componentId, 
-                shipments.isEmpty() ? null : shipments.get(0).getId() // Default to first shipment if any
-            );
-            
-            double altUnitCost = 0.0;
-            final Long currentSelectedShipmentId = selectedShipmentId; // Create a final variable
+            Long initialSelectedShipmentId = alternativeShipmentSelectionsByNodeId.get(node.getId());
+            Long finalSelectedShipmentId = null;
+            double determinedAltUnitCost = unitCostFromHierarchy; // Default to basic cost
 
-            if (currentSelectedShipmentId != null) {
-                altUnitCost = shipments.stream()
-                                .filter(s -> s.getId().equals(currentSelectedShipmentId)) // Use the final variable
-                                .findFirst()
-                                .map(Shipment::getPurchasePrice)
-                                .orElse(0.0);
-            } else if (!shipments.isEmpty()) {
-                 // If no selection, and shipments exist, but somehow selectedShipmentId became null
-                 // (e.g. previous selection deleted), default to first shipment's price
-                 altUnitCost = shipments.get(0).getPurchasePrice();
-                 selectedShipmentId = shipments.get(0).getId(); // also update selectedShipmentId to reflect this default
-            } else {
-                 // If no shipments at all, get basic unit cost from HierarchyNode for this component
-                 HierarchyNode nodeDetails = findHierarchyNodeForComponent(productHierarchy, componentId);
-                 if(nodeDetails != null) {
-                    altUnitCost = nodeDetails.getUnitCost() != null ? nodeDetails.getUnitCost() : 0.0;
-                 } // else altUnitCost remains 0.0
+            Shipment chosenShipment = null;
+
+            if (initialSelectedShipmentId != null) {
+                // Try to find the shipment that was explicitly selected
+                chosenShipment = shipments.stream()
+                    .filter(s -> s.getId().equals(initialSelectedShipmentId))
+                    .findFirst()
+                    .orElse(null);
             }
 
-            double totalAltCostInProduct = altUnitCost * totalQuantity;
-            alternativeComponents.add(new CostingComponentDTO(
-                    componentId,
-                    originalComponent.getName(),
-                    round(altUnitCost),
-                    totalQuantity,
-                    round(totalAltCostInProduct),
-                    shipmentPrices,
-                    selectedShipmentId
-            ));
-            totalAlternativeComponentsCost += totalAltCostInProduct;
-        }
-        viewDTO.setAlternativeComponents(alternativeComponents);
-        viewDTO.setTotalAlternativeComponentsCost(round(totalAlternativeComponentsCost));
-
-        // Alternative Calculation Results
-        double altTotalVariableExpenses = totalAlternativeComponentsCost + totalOzonExpenses;
-        viewDTO.setAlternativeTotalVariableExpenses(round(altTotalVariableExpenses));
-        double altMargin = viewDTO.getProductPrice() - altTotalVariableExpenses;
-        viewDTO.setAlternativeMargin(round(altMargin));
-        viewDTO.setAlternativeMarginPercentage(viewDTO.getProductPrice() > 0 ? round((altMargin / viewDTO.getProductPrice()) * 100) : 0.0);
-        
-        viewDTO.setAllUserProducts(getUserProductsForCosting());
-        return viewDTO;
-    }
-
-    private void collectComponentQuantitiesRecursive(
-        List<HierarchyLevel> allLevelsForProduct,
-        Long parentNodeId, // null for root nodes of the product
-        int parentMultiplier, // How many of the parent are in the product (starts at 1 for root)
-        Map<Long, Integer> componentQuantities // Map<Component Original ID, Total Quantity>
-    ) {
-        List<HierarchyLevel> currentChildrenLevels = allLevelsForProduct.stream()
-            .filter(hl -> {
-                if (parentNodeId == null) return hl.getParentNode() == null;
-                return hl.getParentNode() != null && hl.getParentNode().getId().equals(parentNodeId);
-            })
-            .collect(Collectors.toList());
-
-        for (HierarchyLevel level : currentChildrenLevels) {
-            HierarchyNode childNode = level.getChildNode();
-            int currentTotalQuantity = parentMultiplier * childNode.getQuantity();
-
-            if (childNode.getIsNode()) { // If it's a sub-assembly (node)
-                collectComponentQuantitiesRecursive(allLevelsForProduct, childNode.getId(), currentTotalQuantity, componentQuantities);
-            } else { // If it's an actual component
-                if (childNode.getComponent() != null) {
-                    Long originalComponentId = childNode.getComponent().getId();
-                    componentQuantities.merge(originalComponentId, currentTotalQuantity, Integer::sum);
+            if (chosenShipment != null) {
+                // Valid explicit selection found
+                finalSelectedShipmentId = chosenShipment.getId();
+                determinedAltUnitCost = chosenShipment.getPurchasePrice();
+            } else {
+                // No valid explicit selection (either not provided or invalid ID)
+                // Default to the first available shipment, if any
+                if (!shipments.isEmpty()) {
+                    chosenShipment = shipments.get(0);
+                    finalSelectedShipmentId = chosenShipment.getId();
+                    determinedAltUnitCost = chosenShipment.getPurchasePrice();
+                    // If there was no initial selection, update the map with the default we picked.
+                    // If there *was* an initial (but invalid) selection, the controller will get the new finalSelectedShipmentId
+                    // and can update its altSelectionsString for the next request if needed.
+                    if (initialSelectedShipmentId == null) {
+                         alternativeShipmentSelectionsByNodeId.put(node.getId(), finalSelectedShipmentId);
+                    }
+                } else {
+                    // No shipments available, so finalSelectedShipmentId remains null
+                    // and determinedAltUnitCost remains unitCostFromHierarchy
                 }
             }
+            
+            // If, after all logic, an invalid initialSelectedShipmentId caused chosenShipment to be null 
+            // but shipments were available, we might have defaulted. Ensure the map is updated if an invalid ID was initially passed.
+            if (initialSelectedShipmentId != null && finalSelectedShipmentId != null && !initialSelectedShipmentId.equals(finalSelectedShipmentId)) {
+                alternativeShipmentSelectionsByNodeId.put(node.getId(), finalSelectedShipmentId);
+            }
+
+            double totalCostAlternative = determinedAltUnitCost * quantityInProduct;
+
+            componentInstances.add(CostingComponentInstanceDTO.builder()
+                    .hierarchyNodeId(node.getId())
+                    .componentId(originalComponent.getId())
+                    .componentName(originalComponent.getName())
+                    .quantity(quantityInProduct)
+                    .unitCostFromHierarchy(round(unitCostFromHierarchy))
+                    .totalCostFromHierarchy(round(totalCostFromHierarchy))
+                    .availableShipmentPrices(shipmentPrices)
+                    .selectedShipmentId(finalSelectedShipmentId) // Use the final determined ID
+                    .unitCostAlternative(round(determinedAltUnitCost))
+                    .totalCostAlternative(round(totalCostAlternative))
+                    .build());
         }
-    }
-    
-    private HierarchyNode findHierarchyNodeForComponent(List<HierarchyLevel> productHierarchy, Long originalComponentId) {
-        return productHierarchy.stream()
-            .map(HierarchyLevel::getChildNode)
-            .filter(node -> !node.getIsNode() && node.getComponent() != null && node.getComponent().getId().equals(originalComponentId))
-            .findFirst() // This might not be entirely correct if a component appears multiple times with different node settings
-            .orElse(null); // Or, ideally, fetch the one that's part of *this* product's direct hierarchy if possible
-                           // For now, this assumes unitCost in HierarchyNode is consistent for a component within a product's hierarchy
+
+        viewDTOBuilder.componentInstances(componentInstances);
+
+        // Calculate totals for Basic Scenario
+        double totalBasicComponentsCost = componentInstances.stream()
+                .mapToDouble(CostingComponentInstanceDTO::getTotalCostFromHierarchy)
+                .sum();
+        viewDTOBuilder.totalBasicComponentsCost(round(totalBasicComponentsCost));
+        double basicTotalVariableExpenses = totalBasicComponentsCost + totalOzonExpenses;
+        viewDTOBuilder.basicTotalVariableExpenses(round(basicTotalVariableExpenses));
+        double basicMargin = viewDTOBuilder.build().getProductPrice() - basicTotalVariableExpenses;
+        viewDTOBuilder.basicMargin(round(basicMargin));
+        viewDTOBuilder.basicMarginPercentage(viewDTOBuilder.build().getProductPrice() > 0 ? round((basicMargin / viewDTOBuilder.build().getProductPrice()) * 100) : 0.0);
+
+        // Calculate totals for Alternative Scenario
+        double totalAlternativeComponentsCost = componentInstances.stream()
+                .mapToDouble(CostingComponentInstanceDTO::getTotalCostAlternative)
+                .sum();
+        viewDTOBuilder.totalAlternativeComponentsCost(round(totalAlternativeComponentsCost));
+        double altTotalVariableExpenses = totalAlternativeComponentsCost + totalOzonExpenses;
+        viewDTOBuilder.alternativeTotalVariableExpenses(round(altTotalVariableExpenses));
+        double altMargin = viewDTOBuilder.build().getProductPrice() - altTotalVariableExpenses;
+        viewDTOBuilder.alternativeMargin(round(altMargin));
+        viewDTOBuilder.alternativeMarginPercentage(viewDTOBuilder.build().getProductPrice() > 0 ? round((altMargin / viewDTOBuilder.build().getProductPrice()) * 100) : 0.0);
+
+        viewDTOBuilder.allUserProducts(getUserProductsForCosting());
+        return viewDTOBuilder.build();
     }
 
     private double round(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return 0.0; // Handle cases like division by zero leading to NaN/Infinity
+        }
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 } 

@@ -1,24 +1,23 @@
 package ru.smirnov.warehouse.costing.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.Builder;
+import lombok.Data;
 import ru.smirnov.warehouse.product.entity.Product;
 
 import java.util.List;
 
-@Getter
-@Setter
-@AllArgsConstructor
-@NoArgsConstructor
+@Data
+@Builder
 public class CostingViewDTO {
-    // Product information
+    // Fields for product selection dropdown
+    private List<CostingProductDTO> allUserProducts;
     private Long selectedProductId;
     private String selectedProductName;
-    private Double productPrice; // Цена реализации
 
-    // Ozon expenses
+    // Product specific data (common for both scenarios)
+    private Double productPrice;
+
+    // Ozon expenses (common for both scenarios)
     private Double ozonReward;
     private Double logisticsFee;
     private Double lastMileFee;
@@ -26,25 +25,21 @@ public class CostingViewDTO {
     private Double otherFees;
     private Double totalOzonExpenses;
 
-    // Components for basic calculation
-    private List<CostingComponentDTO> basicComponents;
-    private Double totalBasicComponentsCost;
+    // List of component instances from the hierarchy
+    private List<CostingComponentInstanceDTO> componentInstances;
 
-    // Basic calculation results
-    private Double basicTotalVariableExpenses;
-    private Double basicMargin;
-    private Double basicMarginPercentage;
+    // Calculated values for Basic Scenario (derived from componentInstances)
+    private Double totalBasicComponentsCost; // Sum of (instance.unitCostFromHierarchy * instance.quantity)
+    private Double basicTotalVariableExpenses; // totalBasicComponentsCost + totalOzonExpenses
+    private Double basicMargin;                // productPrice - basicTotalVariableExpenses
+    private Double basicMarginPercentage;      // (basicMargin / productPrice) * 100
 
-    // Components for alternative calculation
-    private List<CostingComponentDTO> alternativeComponents;
-    private Double totalAlternativeComponentsCost;
+    // Calculated values for Alternative Scenario (derived from componentInstances)
+    private Double totalAlternativeComponentsCost; // Sum of (instance.unitCostAlternative * instance.quantity)
+    private Double alternativeTotalVariableExpenses; // totalAlternativeComponentsCost + totalOzonExpenses
+    private Double alternativeMargin;                // productPrice - alternativeTotalVariableExpenses
+    private Double alternativeMarginPercentage;      // (alternativeMargin / productPrice) * 100
 
-    // Alternative calculation results (can be null if not calculated yet)
-    private Double alternativeTotalVariableExpenses;
-    private Double alternativeMargin;
-    private Double alternativeMarginPercentage;
-
-    // List of all products for the dropdown
-    private List<CostingProductDTO> allUserProducts;
-
+    // To carry selections between requests
+    private String altSelectionsString; // e.g., "nodeId1:shipId1,nodeId2:shipId2"
 } 

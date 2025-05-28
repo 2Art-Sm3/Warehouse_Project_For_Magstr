@@ -84,11 +84,11 @@
 
             <h6>Себестоимость</h6>
             <div class="component-list">
-                <div th:each="comp : ${costingView.basicComponents}" class="component-item">
-                    <span class="name" th:text="${comp.name}">Компонент</span>
-                    <span><span th:text="${#numbers.formatDecimal(comp.unitCost, 1, 2, 'COMMA')}"></span> руб.</span>
-                    <span>x <span th:text="${comp.quantityInProduct}"></span> шт.</span>
-                    <span><span class="result" th:text="${#numbers.formatDecimal(comp.totalCostInProduct, 1, 2, 'COMMA')}"></span> руб.</span>
+                <div th:each="compInstance : ${costingView.componentInstances}" class="component-item">
+                    <span class="name" th:text="${compInstance.componentName}">Компонент</span>
+                    <span><span th:text="${#numbers.formatDecimal(compInstance.unitCostFromHierarchy, 1, 2, 'COMMA')}"></span> руб.</span>
+                    <span>x <span th:text="${compInstance.quantity}"></span> шт.</span>
+                    <span><span class="result" th:text="${#numbers.formatDecimal(compInstance.totalCostFromHierarchy, 1, 2, 'COMMA')}"></span> руб.</span>
                 </div>
                 <div class="component-item total-row">
                     <span class="name">Суммарная себестоимость изделия:</span>
@@ -117,22 +117,25 @@
             <h5>Альтернативный сценарий</h5>
             <h6>Себестоимость</h6>
             <div class="component-list">
-                <div th:each="comp : ${costingView.alternativeComponents}" class="component-item">
-                    <span class="name" th:text="${comp.name}">Компонент</span>
+                <div th:each="compInstance : ${costingView.componentInstances}" class="component-item">
+                    <span class="name" th:text="${compInstance.componentName}">Компонент</span>
                     <span>
                         <select class="form-select form-select-sm alt-shipment-select"
-                                th:attr="data-component-id=${comp.componentId}"
+                                th:attr="data-hierarchy-node-id=${compInstance.hierarchyNodeId}"
                                 onchange="handleAlternativeShipmentChange()">
-                            <option th:if="${#lists.isEmpty(comp.availableShipmentPrices)}" value="" th:text="${#numbers.formatDecimal(comp.unitCost, 1, 2, 'COMMA')} + ' руб. (баз.)'" selected></option>
-                            <option th:each="shipmentPrice : ${comp.availableShipmentPrices}"
+                            <option th:if="${#lists.isEmpty(compInstance.availableShipmentPrices)}"
+                                    value=""
+                                    th:text="${#numbers.formatDecimal(compInstance.unitCostFromHierarchy, 1, 2, 'COMMA')} + ' руб. (баз.)'"
+                                    selected></option>
+                            <option th:each="shipmentPrice : ${compInstance.availableShipmentPrices}"
                                     th:value="${shipmentPrice.shipmentId}"
                                     th:text="${shipmentPrice.displayText}"
-                                    th:selected="${shipmentPrice.shipmentId == comp.selectedShipmentId}">
+                                    th:selected="${compInstance.selectedShipmentId != null && shipmentPrice.shipmentId == compInstance.selectedShipmentId}">
                             </option>
                         </select>
                     </span>
-                    <span>x <span th:text="${comp.quantityInProduct}"></span> шт.</span>
-                    <span><span class="result alt-component-total-cost" th:text="${#numbers.formatDecimal(comp.totalCostInProduct, 1, 2, 'COMMA')}"></span> руб.</span>
+                    <span>x <span th:text="${compInstance.quantity}"></span> шт.</span>
+                    <span><span class="result alt-component-total-cost" th:text="${#numbers.formatDecimal(compInstance.totalCostAlternative, 1, 2, 'COMMA')}"></span> руб.</span>
                 </div>
                  <div class="component-item total-row">
                     <span class="name">Суммарная себестоимость изделия:</span>
@@ -196,14 +199,14 @@
 <script th:inline="javascript">
     /*<![CDATA[*/
     const selectedProductId = /*[[${costingView.selectedProductId}]]*/ null;
-    let currentAltSelectionsString = /*[[${altSelectionsString}]]*/ '';
+    let currentAltSelectionsString = /*[[${altSelectionsString}]]*/ ''; // This will be pre-filled by the controller
 
     function handleProductChange() {
         const productId = document.getElementById('productSelect').value;
         if (productId) {
             // При смене продукта сбрасываем выборы альтернативных поставок,
             // так как они относятся к компонентам предыдущего товара.
-            // Сервер сам подставит дефолтные для нового товара.
+            // Сервер сам подставит дефолтные для нового товара и вернет корректный altSelectionsString.
             window.location.href = '/costing?productId=' + productId;
         } else {
             window.location.href = '/costing';
@@ -216,23 +219,21 @@
         const selects = document.querySelectorAll('.alt-shipment-select');
         let selections = [];
         selects.forEach(select => {
-            const componentId = select.getAttribute('data-component-id');
+            const hierarchyNodeId = select.getAttribute('data-hierarchy-node-id'); // Changed to hierarchyNodeId
             const shipmentId = select.value;
-            if (componentId && shipmentId) {
-                selections.push(componentId + ':' + shipmentId);
+            if (hierarchyNodeId && shipmentId) { // Ensure shipmentId is not empty (e.g. the default "баз." option)
+                selections.push(hierarchyNodeId + ':' + shipmentId);
             }
         });
         currentAltSelectionsString = selections.join(',');
-        
-        // Формируем URL для перезагрузки с новыми параметрами
-        // Это гарантирует, что состояние сохраняется в URL и сервер его учтет
+
         let url = '/costing?productId=' + selectedProductId;
         if (currentAltSelectionsString) {
             url += '&altSelections=' + encodeURIComponent(currentAltSelectionsString);
         }
         window.location.href = url;
     }
-    
+
     // Данные для POST запроса на сравнение
     let comparisonData = {
         basicMargin: 0,
@@ -244,24 +245,28 @@
     };
 
     function prepareComparisonData() {
-        // Эти значения уже должны быть на странице из CostingViewDTO
-        // Мы просто собираем их для отправки на сервер для расчета рекомендации
-        // И для отображения в модальном окне
-        
-        const costingView = /*[[${costingView}]]*/ {};
+        const costingView = /*[[${costingView}]]*/ {}; // Raw DTO from Thymeleaf
+
+        if (!costingView || costingView.selectedProductId == null) {
+            // Handle case where costingView might not be fully populated (e.g. no product selected)
+            document.getElementById('comparisonRecommendation').textContent = 'Данные для сравнения не готовы. Выберите товар.';
+            return;
+        }
 
         comparisonData.basicProductPrice = parseFloat(costingView.productPrice || 0);
         comparisonData.basicMargin = parseFloat(costingView.basicMargin || 0);
         comparisonData.basicMarginPercentage = parseFloat(costingView.basicMarginPercentage || 0);
-        
-        comparisonData.alternativeMargin = parseFloat(document.getElementById('alternativeMargin').textContent.replace(' руб.', '').replace(',', '.') || 0);
-        comparisonData.alternativeMarginPercentage = parseFloat(document.getElementById('alternativeMarginPercentage').textContent.replace('%', '').replace(',', '.') || 0);
-        
-        // Расходы Ozon одинаковы для обоих сценариев
-        const totalOzonExpenses = parseFloat(costingView.totalOzonExpenses || 0);
-        const totalAlternativeComponentsCost = parseFloat(document.getElementById('alternativeTotalComponentsCost').textContent.replace(' руб.', '').replace(',', '.') || 0);
-        comparisonData.alternativeTotalVariableExpenses = totalAlternativeComponentsCost + totalOzonExpenses;
 
+        // Values for alternative scenario are taken directly from the displayed elements
+        // as they reflect the current selections and calculations made by the server.
+        const altMarginText = document.getElementById('alternativeMargin')?.textContent || '0';
+        const altMarginPercText = document.getElementById('alternativeMarginPercentage')?.textContent || '0';
+        const altTotalVarExpText = document.getElementById('alternativeTotalVariableExpenses')?.textContent || '0';
+
+        comparisonData.alternativeMargin = parseFloat(altMarginText.replace(' руб.', '').replace(',', '.') || 0);
+        comparisonData.alternativeMarginPercentage = parseFloat(altMarginPercText.replace('%', '').replace(',', '.') || 0);
+        // alternativeTotalVariableExpenses is already calculated and displayed on the page by the server
+        comparisonData.alternativeTotalVariableExpenses = parseFloat(altTotalVarExpText.replace(' руб.', '').replace(',', '.') || 0);
 
         // Заполняем модальное окно сразу
         document.getElementById('modalBasicMargin').textContent = comparisonData.basicMargin.toFixed(2);
@@ -269,16 +274,21 @@
         document.getElementById('modalAlternativeMargin').textContent = comparisonData.alternativeMargin.toFixed(2);
         document.getElementById('modalAlternativeMarginPercentage').textContent = comparisonData.alternativeMarginPercentage.toFixed(2);
 
-        // Отправляем запрос на сервер для получения рекомендации
         fetch('/costing/compare', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-XSRF-TOKEN': getCsrfToken()
+                // CSRF token handling if Spring Security is used and CSRF is enabled
+                // 'X-XSRF-TOKEN': getCsrfToken() 
             },
             body: JSON.stringify(comparisonData)
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok ' + response.statusText);
+            }
+            return response.json();
+        })
         .then(data => {
             document.getElementById('comparisonRecommendation').textContent = data.recommendation || 'Не удалось рассчитать рекомендацию.';
         })
@@ -288,16 +298,14 @@
         });
     }
 
+    // Function to get CSRF token if needed (example)
+    /*
     function getCsrfToken() {
-        const token = document.querySelector('meta[name="_csrf"]');
-        return token ? token.getAttribute('content') : null;
+        const tokenElement = document.querySelector('meta[name="_csrf"]');
+        return tokenElement ? tokenElement.getAttribute('content') : null;
     }
-    
-    // Добавление CSRF токена, если используется Spring Security с CSRF
-    // <meta name="_csrf" th:content="${_csrf.token}"/>
-    // <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
-    // В <head> страницы
-    // И затем в fetch: headers: { ..., [csrfHeader]: csrfToken }
+    // Ensure you have <meta name="_csrf" th:content="${_csrf.token}"/> and <meta name="_csrf_header" th:content="${_csrf.headerName}"/> in <head>
+    */
 
     /*]]>*/
 </script>
